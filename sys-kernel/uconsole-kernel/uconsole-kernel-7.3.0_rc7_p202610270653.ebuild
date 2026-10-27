@@ -1,17 +1,12 @@
 # The kernel of the ClockworkPi uConsole: Raspberry Pi rpi-7.3.y with the
-# series of patches/uconsole-7.3 of this directory, for the platform
-# UCONSOLE_PLATFORM of make.conf (cm5, cm4). Built in the builder as each
-# other package; the uConsole takes its binary package.
+# series of files/patches/uconsole-7.3, for the platform UCONSOLE_PLATFORM
+# of make.conf (cm5, cm4). Built in the builder as each other package; the
+# uConsole takes its binary package.
 #
-# It downloads nothing. This directory has the series (patches/), the
-# fragment of the configuration for both modules (uconsole.config) and
-# firmware/ (the splash built into the kernel). The builder mounts,
-# read-only:
-#   /usr/src/uconsole-base    the clean tree of the base (kernel/base.sh)
-#   /usr/src/uconsole-kernel  kernel/ of this project: the fragments of
-#                             one module, config.sh
-# kernel/bump.sh gives it a new version when the series changes; it stops
-# if the series is not the one it records.
+# It needs nothing but this directory: the source is the tarball of one
+# commit of Raspberry Pi, files/ has the series, the fragments of the
+# configuration and the splash built into the kernel. kernel/bump.sh gives
+# it a new version when files/ or the commit changes.
 
 EAPI=8
 
@@ -19,7 +14,10 @@ inherit toolchain-funcs
 
 DESCRIPTION="Kernel of the ClockworkPi uConsole: Raspberry Pi rpi-7.3.y and its patches"
 HOMEPAGE="https://github.com/raspberrypi/linux"
-S=${WORKDIR}/linux
+
+UCONSOLE_BASE=6634f17dc1348df5d3c98023c24ad9891318a600
+SRC_URI="https://github.com/raspberrypi/linux/archive/${UCONSOLE_BASE}.tar.gz -> raspberrypi-linux-${UCONSOLE_BASE}.tar.gz"
+S=${WORKDIR}/linux-${UCONSOLE_BASE}
 
 LICENSE="GPL-2"
 SLOT="0"
@@ -36,40 +34,23 @@ BDEPEND="
 	virtual/libelf
 "
 
-# written by kernel/bump.sh
-UCONSOLE_BASE=6634f17dc1348df5d3c98023c24ad9891318a600
-UCONSOLE_SERIES_SHA256=f9bf4fb75c2206b8a489927de633618b0bc69b0e8a88398cda0232aeaefe2887
-
-UCONSOLE_BASE_DIR=/usr/src/uconsole-base/linux-${UCONSOLE_BASE}
-UCONSOLE_KERNEL_DIR=/usr/src/uconsole-kernel
+# files/ sha256 (kernel/bump.sh): 2de30baeec00b5ca54a7c5e688d18bd83b2f750cb68cd19510bf1e55b57a1ded
 
 pkg_setup() {
 	case ${UCONSOLE_PLATFORM} in
-		cm5) UCONSOLE_IMAGE=kernel_2712 UCONSOLE_DTBS=bcm2712 ;;
-		cm4) UCONSOLE_IMAGE=kernel8 UCONSOLE_DTBS=bcm2711-rpi-cm4 ;;
+		cm5) UCONSOLE_DEFCONFIG=bcm2712_defconfig UCONSOLE_IMAGE=kernel_2712 UCONSOLE_DTBS=bcm2712 ;;
+		cm4) UCONSOLE_DEFCONFIG=bcm2711_defconfig UCONSOLE_IMAGE=kernel8 UCONSOLE_DTBS=bcm2711-rpi-cm4 ;;
 		*) die "UCONSOLE_PLATFORM of make.conf is '${UCONSOLE_PLATFORM}', not cm5 or cm4" ;;
 	esac
 }
 
-src_unpack() {
-	[[ -f ${UCONSOLE_BASE_DIR}/Makefile ]] ||
-		die "no base tree in ${UCONSOLE_BASE_DIR}: run kernel/base.sh (gentoo-builder/README.md)"
-	[[ -f ${UCONSOLE_KERNEL_DIR}/config.sh ]] ||
-		die "no ${UCONSOLE_KERNEL_DIR}: mount kernel/ of the project there"
-	mkdir -p "${S}" || die
-	cp -a "${UCONSOLE_BASE_DIR}/." "${S}/" || die
-}
-
 src_prepare() {
-	local sum
-	sum=$(cat "${EBUILD%/*}"/patches/uconsole-7.3/*.patch \
-		"${UCONSOLE_KERNEL_DIR}"/uconsole-*.config \
-		"${EBUILD%/*}"/uconsole.config \
-		"${EBUILD%/*}"/firmware/*.tga | sha256sum) || die
-	[[ ${sum%% *} == "${UCONSOLE_SERIES_SHA256}" ]] ||
-		die "the series, the fragments or firmware/ changed: run kernel/bump.sh"
+	eapply "${FILESDIR}"/patches/uconsole-7.3
 
-	eapply "${EBUILD%/*}"/patches/uconsole-7.3/*.patch
+	# built into the kernel (CONFIG_EXTRA_FIRMWARE_DIR of uconsole.config)
+	mkdir firmware-uconsole || die
+	cp "${FILESDIR}"/uconsole-splash.tga firmware-uconsole/ || die
+
 	eapply_user
 }
 
@@ -83,10 +64,24 @@ src_configure() {
 		LD="$(tc-getLD)" AR="$(tc-getAR)" NM="$(tc-getNM)"
 		OBJCOPY="$(tc-getOBJCOPY)" STRIP="$(tc-getSTRIP)"
 	)
-	UCONSOLE_PKG_DIR=${EBUILD%/*} \
-	KMAKE="make ${MAKEOPTS} ${UCONSOLE_MAKEARGS[*]}" \
-		"${UCONSOLE_KERNEL_DIR}"/config.sh "${S}" "${WORKDIR}/build" "${UCONSOLE_PLATFORM}" ||
-		die "config.sh failed"
+	local b=${WORKDIR}/build f line opt
+	local fragments=( "${FILESDIR}"/uconsole.config "${FILESDIR}/uconsole-${UCONSOLE_PLATFORM}.config" )
+
+	emake -C "${S}" O="${b}" "${UCONSOLE_MAKEARGS[@]}" "${UCONSOLE_DEFCONFIG}"
+	"${S}"/scripts/kconfig/merge_config.sh -m -O "${b}" "${b}/.config" "${fragments[@]}" || die
+	emake -C "${S}" O="${b}" "${UCONSOLE_MAKEARGS[@]}" olddefconfig
+
+	# olddefconfig drops an option whose dependencies are not met, and
+	# says nothing: each line of the fragments must be in the result
+	for f in "${fragments[@]}"; do
+		while read -r line; do
+			case ${line} in
+				"# "*) opt=${line#"# "}; opt=${opt%% *}
+				       ! grep -q "^${opt}=" "${b}/.config" ;;
+				*) grep -qxF "${line}" "${b}/.config" ;;
+			esac || die "not in .config: ${line} (${f##*/})"
+		done < <(grep -E '^(CONFIG_|# CONFIG_[A-Z0-9_]+ is not set$)' "${f}")
+	done
 }
 
 src_compile() {
