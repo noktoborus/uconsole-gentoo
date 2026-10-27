@@ -61,7 +61,8 @@ src_unpack() {
 src_prepare() {
 	local sum
 	sum=$(cat "${UCONSOLE_KERNEL_DIR}"/patches/uconsole-7.3/*.patch \
-		"${UCONSOLE_KERNEL_DIR}"/uconsole*.config \
+		"${UCONSOLE_KERNEL_DIR}"/uconsole-*.config \
+		"${EBUILD%/*}"/uconsole.config \
 		"${UCONSOLE_KERNEL_DIR}"/firmware/*.tga | sha256sum) || die
 	[[ ${sum%% *} == "${UCONSOLE_SERIES_SHA256}" ]] ||
 		die "the series, the fragments or firmware/ changed: run kernel/bump.sh"
@@ -80,6 +81,7 @@ src_configure() {
 		LD="$(tc-getLD)" AR="$(tc-getAR)" NM="$(tc-getNM)"
 		OBJCOPY="$(tc-getOBJCOPY)" STRIP="$(tc-getSTRIP)"
 	)
+	UCONSOLE_COMMON_CONFIG=${EBUILD%/*}/uconsole.config \
 	KMAKE="make ${MAKEOPTS} ${UCONSOLE_MAKEARGS[*]}" \
 		"${UCONSOLE_KERNEL_DIR}"/config.sh "${S}" "${WORKDIR}/build" "${UCONSOLE_PLATFORM}" ||
 		die "config.sh failed"
