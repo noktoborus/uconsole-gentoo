@@ -39,9 +39,9 @@ BDEPEND="
 
 pkg_setup() {
 	if use cm5; then
-		UCONSOLE_PLATFORM=cm5 UCONSOLE_DEFCONFIG=bcm2712_defconfig UCONSOLE_IMAGE=kernel_2712 UCONSOLE_DTBS=bcm2712
+		UCONSOLE_FRAGMENT=uconsole-cm5.config UCONSOLE_DEFCONFIG=bcm2712_defconfig UCONSOLE_IMAGE=kernel_2712 UCONSOLE_DTBS=bcm2712
 	else
-		UCONSOLE_PLATFORM=cm4 UCONSOLE_DEFCONFIG=bcm2711_defconfig UCONSOLE_IMAGE=kernel8 UCONSOLE_DTBS=bcm2711-rpi-cm4
+		UCONSOLE_FRAGMENT=uconsole-cm4.config UCONSOLE_DEFCONFIG=bcm2711_defconfig UCONSOLE_IMAGE=kernel8 UCONSOLE_DTBS=bcm2711-rpi-cm4
 	fi
 }
 
@@ -66,7 +66,7 @@ src_configure() {
 		OBJCOPY="$(tc-getOBJCOPY)" STRIP="$(tc-getSTRIP)"
 	)
 	local b=${WORKDIR}/build f line opt
-	local fragments=( "${FILESDIR}"/uconsole.config "${FILESDIR}/uconsole-${UCONSOLE_PLATFORM}.config" )
+	local fragments=( "${FILESDIR}"/uconsole.config "${FILESDIR}/${UCONSOLE_FRAGMENT}" )
 
 	emake -C "${S}" O="${b}" "${UCONSOLE_MAKEARGS[@]}" "${UCONSOLE_DEFCONFIG}"
 	"${S}"/scripts/kconfig/merge_config.sh -m -O "${b}" "${b}/.config" "${fragments[@]}" || die
