@@ -1,6 +1,5 @@
 # The kernel of the ClockworkPi uConsole: Raspberry Pi rpi-7.3.y with the
-# series of files/patches/uconsole-7.3, for the platform UCONSOLE_PLATFORM
-# of make.conf (cm5, cm4). Built in the builder as each other package; the
+# series of files/patches/uconsole-7.3, for the platform of USE (cm5, cm4). Built in the builder as each other package; the
 # uConsole takes its binary package.
 #
 # It needs nothing but this directory: the source is the tarball of one
@@ -23,6 +22,8 @@ LICENSE="GPL-2"
 SLOT="0"
 KEYWORDS="~arm64"
 RESTRICT="binchecks strip test"
+IUSE="+cm5 cm4"
+REQUIRED_USE="^^ ( cm4 cm5 )"
 
 BDEPEND="
 	app-alternatives/bc
@@ -37,11 +38,11 @@ BDEPEND="
 # files/ sha256 (kernel/bump.sh): 2de30baeec00b5ca54a7c5e688d18bd83b2f750cb68cd19510bf1e55b57a1ded
 
 pkg_setup() {
-	case ${UCONSOLE_PLATFORM} in
-		cm5) UCONSOLE_DEFCONFIG=bcm2712_defconfig UCONSOLE_IMAGE=kernel_2712 UCONSOLE_DTBS=bcm2712 ;;
-		cm4) UCONSOLE_DEFCONFIG=bcm2711_defconfig UCONSOLE_IMAGE=kernel8 UCONSOLE_DTBS=bcm2711-rpi-cm4 ;;
-		*) die "UCONSOLE_PLATFORM of make.conf is '${UCONSOLE_PLATFORM}', not cm5 or cm4" ;;
-	esac
+	if use cm5; then
+		UCONSOLE_PLATFORM=cm5 UCONSOLE_DEFCONFIG=bcm2712_defconfig UCONSOLE_IMAGE=kernel_2712 UCONSOLE_DTBS=bcm2712
+	else
+		UCONSOLE_PLATFORM=cm4 UCONSOLE_DEFCONFIG=bcm2711_defconfig UCONSOLE_IMAGE=kernel8 UCONSOLE_DTBS=bcm2711-rpi-cm4
+	fi
 }
 
 src_prepare() {
