@@ -1,0 +1,37 @@
+From e6258855da98d87322d459167d0de6c454433148 Mon Sep 17 00:00:00 2001
+From: Ruben Paz <me@ruben.io>
+Date: Wed, 10 Jun 2026 21:49:19 +0100
+Subject: [PATCH 05/10] power: supply: axp20x_battery: fix voltage_now cache
+ assignment (#8)
+
+In axp20x_battery_get_prop(), the POWER_SUPPLY_PROP_VOLTAGE_NOW case
+was incorrectly writing to axp20x_batt->current_now instead of
+axp20x_batt->voltage_now. This meant voltage_now was never populated
+(always 0), causing POWER_SUPPLY_PROP_POWER_NOW to always return 0.
+
+UPower classifies this as an energy-reporting battery (energy_now is
+present) and reads the discharge rate directly from power_now, so the
+persistent zero caused UPower to report 0W energy-rate with no
+time-to-empty/full estimate in GNOME.
+
+Fix the typo so voltage_now is correctly cached.
+---
+ drivers/power/supply/axp20x_battery.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/power/supply/axp20x_battery.c b/drivers/power/supply/axp20x_battery.c
+index a9437d8cce..cad3ae9ba5 100644
+--- a/drivers/power/supply/axp20x_battery.c
++++ b/drivers/power/supply/axp20x_battery.c
+@@ -424,7 +424,7 @@ static int axp20x_battery_get_prop(struct power_supply *psy,
+ 
+ 		/* IIO framework gives mV but Power Supply framework gives uV */
+ 		val->intval *= 1000;
+-		axp20x_batt->current_now = val->intval;
++		axp20x_batt->voltage_now = val->intval;
+ 
+ 		break;
+ 
+-- 
+2.39.5
+

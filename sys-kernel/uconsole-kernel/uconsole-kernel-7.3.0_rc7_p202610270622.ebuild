@@ -1,13 +1,15 @@
 # The kernel of the ClockworkPi uConsole: Raspberry Pi rpi-7.3.y with the
-# series of kernel/patches/uconsole-7.3 of this project, for the platform
+# series of patches/uconsole-7.3 of this directory, for the platform
 # UCONSOLE_PLATFORM of make.conf (cm5, cm4). Built in the builder as each
 # other package; the uConsole takes its binary package.
 #
-# It downloads nothing. The builder mounts, read-only:
+# It downloads nothing. This directory has the series (patches/), the
+# fragment of the configuration for both modules (uconsole.config) and
+# firmware/ (the splash built into the kernel). The builder mounts,
+# read-only:
 #   /usr/src/uconsole-base    the clean tree of the base (kernel/base.sh)
-#   /usr/src/uconsole-kernel  kernel/ of this project: the series, the
-#                             fragments of the configuration, config.sh,
-#                             firmware/ (the splash built into the kernel)
+#   /usr/src/uconsole-kernel  kernel/ of this project: the fragments of
+#                             one module, config.sh
 # kernel/bump.sh gives it a new version when the series changes; it stops
 # if the series is not the one it records.
 
@@ -52,7 +54,7 @@ pkg_setup() {
 src_unpack() {
 	[[ -f ${UCONSOLE_BASE_DIR}/Makefile ]] ||
 		die "no base tree in ${UCONSOLE_BASE_DIR}: run kernel/base.sh (gentoo-builder/README.md)"
-	[[ -d ${UCONSOLE_KERNEL_DIR}/patches/uconsole-7.3 ]] ||
+	[[ -f ${UCONSOLE_KERNEL_DIR}/config.sh ]] ||
 		die "no ${UCONSOLE_KERNEL_DIR}: mount kernel/ of the project there"
 	mkdir -p "${S}" || die
 	cp -a "${UCONSOLE_BASE_DIR}/." "${S}/" || die
@@ -60,14 +62,14 @@ src_unpack() {
 
 src_prepare() {
 	local sum
-	sum=$(cat "${UCONSOLE_KERNEL_DIR}"/patches/uconsole-7.3/*.patch \
+	sum=$(cat "${EBUILD%/*}"/patches/uconsole-7.3/*.patch \
 		"${UCONSOLE_KERNEL_DIR}"/uconsole-*.config \
 		"${EBUILD%/*}"/uconsole.config \
-		"${UCONSOLE_KERNEL_DIR}"/firmware/*.tga | sha256sum) || die
+		"${EBUILD%/*}"/firmware/*.tga | sha256sum) || die
 	[[ ${sum%% *} == "${UCONSOLE_SERIES_SHA256}" ]] ||
 		die "the series, the fragments or firmware/ changed: run kernel/bump.sh"
 
-	eapply "${UCONSOLE_KERNEL_DIR}"/patches/uconsole-7.3/*.patch
+	eapply "${EBUILD%/*}"/patches/uconsole-7.3/*.patch
 	eapply_user
 }
 
@@ -81,7 +83,7 @@ src_configure() {
 		LD="$(tc-getLD)" AR="$(tc-getAR)" NM="$(tc-getNM)"
 		OBJCOPY="$(tc-getOBJCOPY)" STRIP="$(tc-getSTRIP)"
 	)
-	UCONSOLE_COMMON_CONFIG=${EBUILD%/*}/uconsole.config \
+	UCONSOLE_PKG_DIR=${EBUILD%/*} \
 	KMAKE="make ${MAKEOPTS} ${UCONSOLE_MAKEARGS[*]}" \
 		"${UCONSOLE_KERNEL_DIR}"/config.sh "${S}" "${WORKDIR}/build" "${UCONSOLE_PLATFORM}" ||
 		die "config.sh failed"

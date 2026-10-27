@@ -1,0 +1,36 @@
+From 5d816f6a3e6d1a2b1b841eeac054a141abeb002c Mon Sep 17 00:00:00 2001
+From: Rex <rex@linux.com>
+Date: Sat, 25 Jul 2026 23:13:46 -0400
+Subject: [PATCH] Added: OpenVPN to be built as module
+
+OpenVPN data channel acceleration module to build as a loadable kernel module
+---
+ arch/arm64/configs/bcm2711_defconfig | 1 +
+ arch/arm64/configs/bcm2712_defconfig | 1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/arch/arm64/configs/bcm2711_defconfig b/arch/arm64/configs/bcm2711_defconfig
+index f18f3422a0..d37980f3f2 100644
+--- a/arch/arm64/configs/bcm2711_defconfig
++++ b/arch/arm64/configs/bcm2711_defconfig
+@@ -1773,5 +1773,6 @@ CONFIG_TI_ADC081C=m
+ CONFIG_CRYPTO_LIB_ARC4=y
+ CONFIG_CRC_CCITT=y
+ CONFIG_VIDEO_V4L2_LOOPBACK=m
++CONFIG_OVPN=m
+ # CONFIG_UPROBE_EVENTS is not set
+ # CONFIG_STRICT_DEVMEM is not set
+diff --git a/arch/arm64/configs/bcm2712_defconfig b/arch/arm64/configs/bcm2712_defconfig
+index 9528449d66..c1169e0225 100644
+--- a/arch/arm64/configs/bcm2712_defconfig
++++ b/arch/arm64/configs/bcm2712_defconfig
+@@ -1775,5 +1775,6 @@ CONFIG_TI_ADC081C=m
+ CONFIG_CRYPTO_LIB_ARC4=y
+ CONFIG_CRC_CCITT=y
+ CONFIG_VIDEO_V4L2_LOOPBACK=m
++CONFIG_OVPN=m
+ # CONFIG_UPROBE_EVENTS is not set
+ # CONFIG_STRICT_DEVMEM is not set
+-- 
+2.39.5
+

@@ -1,0 +1,40 @@
+From a27c029c3ac0eeb9defa708c88c945e05d4c5b4e Mon Sep 17 00:00:00 2001
+From: Noktoborus <noktoborus@gmail.com>
+Date: Mon, 19 Oct 2026 18:38:11 +0000
+Subject: [PATCH 4/5] overlays: clockworkpi-uconsole-cm5: mux GPIO0/1 as GPIO
+ for i2c-gpio
+
+Since "pinctrl: rp1: enable strict pinmux mode", RP1 refuses a GPIO
+request on a pin muxed to a peripheral. Fragment 0 makes i2c0 an
+i2c-gpio bus on GPIO0 and GPIO1 for the AXP228, but keeps the pin group
+rp1_i2c0_0_1 with function "i2c0", so the bus to the PMIC fails.
+
+Set the function of that group to "gpio".
+---
+ .../overlays/clockworkpi-uconsole-cm5-overlay.dts    | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/arch/arm/boot/dts/overlays/clockworkpi-uconsole-cm5-overlay.dts b/arch/arm/boot/dts/overlays/clockworkpi-uconsole-cm5-overlay.dts
+index 60badef9ef8..09a9df9b4ec 100644
+--- a/arch/arm/boot/dts/overlays/clockworkpi-uconsole-cm5-overlay.dts
++++ b/arch/arm/boot/dts/overlays/clockworkpi-uconsole-cm5-overlay.dts
+@@ -178,4 +178,16 @@
+ 			};
+ 		};
+ 	};
++
++	/*
++	 * RP1 has strict pinmux: a GPIO request on a pin muxed to i2c0 is
++	 * refused. The i2c-gpio bus of fragment 0 uses GPIO0 and GPIO1 as
++	 * GPIOs, so their pin group must be muxed as GPIO.
++	 */
++	fragment@5 {
++		target = <&rp1_i2c0_0_1>;
++		__overlay__ {
++			function = "gpio";
++		};
++	};
+ };
+-- 
+2.39.5
+

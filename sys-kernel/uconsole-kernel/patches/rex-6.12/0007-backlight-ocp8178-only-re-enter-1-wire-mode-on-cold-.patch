@@ -1,0 +1,92 @@
+From 2407c5e1bee734820fd4e2a07c8b2cf915a6e807 Mon Sep 17 00:00:00 2001
+From: Oleg Proshkin <oleg.pro171@gmail.com>
+Date: Fri, 12 Jun 2026 03:50:35 +0300
+Subject: [PATCH 07/10] backlight: ocp8178: only re-enter 1-wire mode on cold
+ start (#10)
+
+The OCP8178 backlight is driven over the EasyScale 1-wire GPIO protocol.
+ocp8178_update_status() called entry_1wire_mode() on every brightness
+change twice.
+
+entry_1wire_mode() deliberately holds the control GPIO low for
+SHUTDOWN_TIME (~3 ms) to reset the chip into EasyScale detection, which
+turns the LED fully off. Running it on every update therefore blanks the
+panel for a short time on each change: the backlight blinks on a
+brightness key press and strobes when the GUI brightness slider is
+dragged.
+
+The shutdown + re-detect sequence is only required once after power-up.
+While the chip stays latched in 1-wire mode a brightness change is just a
+data frame (write_byte) with no LED-off phase and no visible flash.
+
+Track this with a new onewire_ready flag and only run entry_1wire_mode()
+on the cold path: the first update after probe, or when the backlight is
+coming on from a fully off state. Steady-state brightness changes now
+stream a single frame.
+
+Tested on a ClockworkPi uConsole (CM4, 6.12.92-v8+): a full brightness
+sweep and GUI slider drag are now flash-free.
+
+Signed-off-by: Oleg Proshkin <oleg.pro171@gmail.com>
+---
+ drivers/video/backlight/ocp8178_bl.c | 27 +++++++++++++++++++++++++--
+ 1 file changed, 25 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/video/backlight/ocp8178_bl.c b/drivers/video/backlight/ocp8178_bl.c
+index a9fb9682ad..b502bcd1f3 100644
+--- a/drivers/video/backlight/ocp8178_bl.c
++++ b/drivers/video/backlight/ocp8178_bl.c
+@@ -37,6 +37,7 @@ struct ocp8178_backlight {
+ 	struct gpio_desc *gpiod;
+ 	int def_value;
+ 	int current_value;
++	bool onewire_ready;
+ };
+ 
+ #define DETECT_DELAY 200
+@@ -126,7 +127,7 @@ unsigned char ocp8178_bl_table[MAX_BRIGHTNESS_VALUE+1] = {0, 1, 4, 8, 12, 16, 20
+ static int ocp8178_update_status(struct backlight_device *bl)
+ {
+ 	struct ocp8178_backlight *gbl = bl_get_data(bl);
+-	int brightness = bl->props.brightness, i;
++	int brightness = bl->props.brightness;
+ 
+ 	if (bl->props.power != FB_BLANK_UNBLANK ||
+ 	    bl->props.state & (BL_CORE_SUSPENDED | BL_CORE_FBBLANK))
+@@ -135,10 +136,32 @@ static int ocp8178_update_status(struct backlight_device *bl)
+ 	if(brightness > MAX_BRIGHTNESS_VALUE)
+ 		brightness = MAX_BRIGHTNESS_VALUE;
+ 
+-	for(i = 0; i < 2; i++) {
++	/*
++	 * The OCP8178 EasyScale 1-wire interface only needs the shutdown +
++	 * re-detect sequence (entry_1wire_mode, which deliberately holds the
++	 * LED off for ~3 ms to reset the chip) ONCE after power-up.  While the
++	 * chip stays in 1-wire mode a brightness change is just a data frame
++	 * (write_byte) with no LED-off reset -- and therefore no visible flash.
++	 * Running entry_1wire_mode on every update (twice, as the original code
++	 * did) is what blanked the panel on each change and made it strobe under
++	 * the GUI brightness slider.
++	 *
++	 * Only re-detect when the backlight is coming on from a fully off /
++	 * blanked state (cold start, DPMS unblank, resume), where the chip may
++	 * have dropped out of 1-wire mode.  There the LED is dark anyway, so the
++	 * reset is invisible.  Steady-state changes just stream a frame.
++	 */
++	if (!gbl->onewire_ready ||
++	    (gbl->current_value == 0 && brightness != 0)) {
+ 		entry_1wire_mode(gbl);
+ 		write_byte(gbl, ocp8178_bl_table[brightness]);
++		entry_1wire_mode(gbl);
++		write_byte(gbl, ocp8178_bl_table[brightness]);
++		gbl->onewire_ready = true;
++	} else {
++		write_byte(gbl, ocp8178_bl_table[brightness]);
+ 	}
++
+ 	gbl->current_value = brightness;
+ 
+ 	return 0;
+-- 
+2.39.5
+

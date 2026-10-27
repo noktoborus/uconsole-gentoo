@@ -1,0 +1,27 @@
+From df46936b3a18c730618e69d4539f2cfcfd40ccfa Mon Sep 17 00:00:00 2001
+From: Rex <rex@linux.com>
+Date: Thu, 16 Jul 2026 13:17:10 -0400
+Subject: [PATCH 10/10] Fixed: CM4S overlay for the uConsole
+
+---
+ .../boot/dts/overlays/clockworkpi-uconsole-cm4s-overlay.dts   | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/arch/arm/boot/dts/overlays/clockworkpi-uconsole-cm4s-overlay.dts b/arch/arm/boot/dts/overlays/clockworkpi-uconsole-cm4s-overlay.dts
+index ef52bd9ddc..4f1be23922 100644
+--- a/arch/arm/boot/dts/overlays/clockworkpi-uconsole-cm4s-overlay.dts
++++ b/arch/arm/boot/dts/overlays/clockworkpi-uconsole-cm4s-overlay.dts
+@@ -392,8 +392,8 @@
+ 		};
+ 	};
+ 
+-	panel_cwu50: panel@0 {
+-		compatible = "clockwork,cwu50";
++	panel_cwu50_cm3: panel@0 {
++		compatible = "clockwork,cwu50-cm3";
+ 		reg = <0>;
+ 		reset-gpio = <&gpio 8 1>; /* GPIO8 ACTIVE LOW */
+ 		backlight = <&ocp8178_backlight>;
+-- 
+2.39.5
+

@@ -1,0 +1,37 @@
+From 39c2a108d8d430e003bf9177d21d8d765649fe3b Mon Sep 17 00:00:00 2001
+From: Noktoborus <noktoborus@gmail.com>
+Date: Mon, 19 Oct 2026 18:39:59 +0000
+Subject: [PATCH 5/5] configs: drop CONFIG_VIDEO_V4L2_LOOPBACK
+
+The driver of v4l2loopback is not taken from Rex's patch set; Gentoo
+builds it as media-video/v4l2loopback.
+---
+ arch/arm64/configs/bcm2711_defconfig | 1 -
+ arch/arm64/configs/bcm2712_defconfig | 1 -
+ 2 files changed, 2 deletions(-)
+
+diff --git a/arch/arm64/configs/bcm2711_defconfig b/arch/arm64/configs/bcm2711_defconfig
+index 3e08efb9bfe..b86ac5fac88 100644
+--- a/arch/arm64/configs/bcm2711_defconfig
++++ b/arch/arm64/configs/bcm2711_defconfig
+@@ -1784,6 +1784,5 @@ CONFIG_AXP20X_ADC=m
+ CONFIG_TI_ADC081C=m
+ CONFIG_CRYPTO_LIB_ARC4=y
+ CONFIG_CRC_CCITT=y
+-CONFIG_VIDEO_V4L2_LOOPBACK=m
+ # CONFIG_UPROBE_EVENTS is not set
+ # CONFIG_STRICT_DEVMEM is not set
+diff --git a/arch/arm64/configs/bcm2712_defconfig b/arch/arm64/configs/bcm2712_defconfig
+index bc02b7c661a..54d7004543a 100644
+--- a/arch/arm64/configs/bcm2712_defconfig
++++ b/arch/arm64/configs/bcm2712_defconfig
+@@ -1786,6 +1786,5 @@ CONFIG_AXP20X_ADC=m
+ CONFIG_TI_ADC081C=m
+ CONFIG_CRYPTO_LIB_ARC4=y
+ CONFIG_CRC_CCITT=y
+-CONFIG_VIDEO_V4L2_LOOPBACK=m
+ # CONFIG_UPROBE_EVENTS is not set
+ # CONFIG_STRICT_DEVMEM is not set
+-- 
+2.39.5
+

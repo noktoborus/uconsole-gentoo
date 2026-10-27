@@ -1,0 +1,47 @@
+From dc1884b0289c508386841188556369e0382a4e97 Mon Sep 17 00:00:00 2001
+From: Oleg Proshkin <oleg.pro171@gmail.com>
+Date: Wed, 10 Jun 2026 23:49:35 +0300
+Subject: [PATCH 06/10] mfd: axp20x: preserve CHGLED bit on power-off for
+ AXP221/AXP223 (#9)
+
+axp20x_power_off() asserts the power-off bit by writing AXP20X_OFF (BIT(7)) to the power-off control register with regmap_write(), which overwrites the whole register. On the AXP221/AXP223 and the register-compatible AXP228 - AXP20X_OFF_CTRL (0x32) also holds the CHGLED auto-control bit, so an orderly shutdown clears it and the hardware charge-indicator LED stays dark while the board is powered off and charging.
+
+Set only the power-off bit with regmap_set_bits() on these variants so the CHGLED configuration already programmed in the register is preserved. The change is deliberately limited to AXP221/AXP223; the other variants keep the historical full-register write, so their power-off behaviour is unchanged. Tested on a ClockworkPi uConsole (CM4, AXP228): AXP20X_OFF_CTRL reads 0x08 at runtime, so the current code leaves it 0x80 while setting only BIT(7) leaves 0x88. Forcing 0x88 at power-off lights the charge LED while still powering the PMIC off.
+
+Signed-off-by: Oleg Proshkin <oleg.pro171@gmail.com>
+---
+ drivers/mfd/axp20x.c | 18 +++++++++++++++++-
+ 1 file changed, 17 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/mfd/axp20x.c b/drivers/mfd/axp20x.c
+index cbf1029d03..fdc1122f5d 100644
+--- a/drivers/mfd/axp20x.c
++++ b/drivers/mfd/axp20x.c
+@@ -1231,7 +1231,23 @@ static int axp20x_power_off(struct sys_off_data *data)
+ 		break;
+ 	}
+ 
+-	regmap_write(axp20x->regmap, shutdown_reg, AXP20X_OFF);
++	/*
++	 * On the AXP221/AXP223 (and the register-compatible AXP228) the
++	 * power-off control register also holds the CHGLED auto-control
++	 * bit. A blind write clears it, leaving the charge LED dark while
++	 * the board is powered off and charging; set only the power-off
++	 * bit so that configuration is preserved. Other variants keep the
++	 * full-register write.
++	 */
++	switch (axp20x->variant) {
++	case AXP221_ID:
++	case AXP223_ID:
++		regmap_set_bits(axp20x->regmap, shutdown_reg, AXP20X_OFF);
++		break;
++	default:
++		regmap_write(axp20x->regmap, shutdown_reg, AXP20X_OFF);
++		break;
++	}
+ 
+ 	/* Give capacitors etc. time to drain to avoid kernel panic msg. */
+ 	mdelay(500);
+-- 
+2.39.5
+

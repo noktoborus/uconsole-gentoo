@@ -1,0 +1,171 @@
+From 4b5b5fe35abbbf4193ddbeab149833172096066b Mon Sep 17 00:00:00 2001
+From: rex <rex@linux.com>
+Date: Wed, 4 Feb 2026 16:04:21 -0500
+Subject: [PATCH 02/10] fix overlays
+
+---
+ .../overlays/clockworkpi-devterm-overlay.dts  | 26 +++++--------------
+ .../clockworkpi-uconsole-cm5-overlay.dts      |  6 -----
+ .../overlays/clockworkpi-uconsole-overlay.dts | 26 +++++--------------
+ 3 files changed, 12 insertions(+), 46 deletions(-)
+
+diff --git a/arch/arm/boot/dts/overlays/clockworkpi-devterm-overlay.dts b/arch/arm/boot/dts/overlays/clockworkpi-devterm-overlay.dts
+index 4d187c53e5..ab0b81c30c 100644
+--- a/arch/arm/boot/dts/overlays/clockworkpi-devterm-overlay.dts
++++ b/arch/arm/boot/dts/overlays/clockworkpi-devterm-overlay.dts
+@@ -83,22 +83,8 @@
+ 			bootargs = "8250.nr_uarts=1";
+ 		};
+ 	};
+-	
+-	fragment@5 {
+-		target = <&pcie0>;
+-		__overlay__ {
+-			status = "disabled";
+-		};
+-	};
+-
+-	fragment@6 {
+-		target = <&genet>;
+-		__overlay__ {
+-			status = "disabled";
+-		};
+-	};
+ 
+-	fragment@7 {
++	fragment@5 {
+ 		target = <&i2c0if>;
+ 		__overlay__ {
+ 			#address-cells = <1>;
+@@ -170,21 +156,21 @@
+ 		};
+ 	};
+ 
+-	fragment@8 {
++	fragment@6 {
+ 		target = <&i2c0if>;
+ 		__overlay__ {
+ 			compatible = "brcm,bcm2708-i2c";
+ 		};
+ 	};
+ 
+-	fragment@9 {
++	fragment@7 {
+ 		target-path = "/aliases";
+ 		__overlay__ {
+ 			i2c0 = "/soc/i2c@7e205000";
+ 		};
+ 	};
+ 
+-	fragment@10 {
++	fragment@8 {
+ 		target-path = "/";
+ 		__overlay__  {
+ 			battery: battery@0 {
+@@ -201,7 +187,7 @@
+ 		};
+ 	};
+ 
+-	fragment@11 {
++	fragment@9 {
+ 		target=<&dsi1>;
+ 		__overlay__ {
+ 			#address-cells = <1>;
+@@ -230,7 +216,7 @@
+ 		};
+ 	};
+ 
+-	fragment@12 {
++	fragment@10 {
+ 		target-path = "/";
+ 		__overlay__  {
+ 			ocp8178_backlight: backlight@0 {
+diff --git a/arch/arm/boot/dts/overlays/clockworkpi-uconsole-cm5-overlay.dts b/arch/arm/boot/dts/overlays/clockworkpi-uconsole-cm5-overlay.dts
+index d6a1dac36f..60badef9ef 100644
+--- a/arch/arm/boot/dts/overlays/clockworkpi-uconsole-cm5-overlay.dts
++++ b/arch/arm/boot/dts/overlays/clockworkpi-uconsole-cm5-overlay.dts
+@@ -178,10 +178,4 @@
+ 			};
+ 		};
+ 	};
+-	fragment@5 {
+-		target-path = "ethernet0";
+-		__overlay__ {
+-			status = "disabled";
+-		};
+-	};
+ };
+diff --git a/arch/arm/boot/dts/overlays/clockworkpi-uconsole-overlay.dts b/arch/arm/boot/dts/overlays/clockworkpi-uconsole-overlay.dts
+index 26f32c9ce0..4a1e9789ab 100644
+--- a/arch/arm/boot/dts/overlays/clockworkpi-uconsole-overlay.dts
++++ b/arch/arm/boot/dts/overlays/clockworkpi-uconsole-overlay.dts
+@@ -83,22 +83,8 @@
+ 			bootargs = "8250.nr_uarts=1";
+ 		};
+ 	};
+-	
+-	fragment@5 {
+-		target = <&pcie0>;
+-		__overlay__ {
+-			status = "disabled";
+-		};
+-	};
+-
+-	fragment@6 {
+-		target = <&genet>;
+-		__overlay__ {
+-			status = "disabled";
+-		};
+-	};
+ 
+-	fragment@7 {
++	fragment@5 {
+ 		target = <&i2c0if>;
+ 		__overlay__ {
+ 			#address-cells = <1>;
+@@ -170,21 +156,21 @@
+ 		};
+ 	};
+ 
+-	fragment@8 {
++	fragment@6 {
+ 		target = <&i2c0if>;
+ 		__overlay__ {
+ 			compatible = "brcm,bcm2708-i2c";
+ 		};
+ 	};
+ 
+-	fragment@9 {
++	fragment@7 {
+ 		target-path = "/aliases";
+ 		__overlay__ {
+ 			i2c0 = "/soc/i2c@7e205000";
+ 		};
+ 	};
+ 
+-	fragment@10 {
++	fragment@8 {
+ 		target-path = "/";
+ 		__overlay__  {
+ 			battery: battery@0 {
+@@ -201,7 +187,7 @@
+ 		};
+ 	};
+ 
+-	fragment@11 {
++	fragment@9 {
+ 		target=<&dsi1>;
+ 		__overlay__ {
+ 			#address-cells = <1>;
+@@ -231,7 +217,7 @@
+ 		};
+ 	};
+ 
+-	fragment@12 {
++	fragment@10 {
+ 		target-path = "/";
+ 		__overlay__  {
+ 			ocp8178_backlight: backlight@0 {
+-- 
+2.39.5
+
