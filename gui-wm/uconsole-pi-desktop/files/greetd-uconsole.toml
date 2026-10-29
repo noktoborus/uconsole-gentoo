@@ -1,0 +1,20 @@
+# /etc/greetd/uconsole.toml: greetd runs the greeter as the user greetd
+# (acct-user/greetd, in the group video), on VT 7, out of the way of the
+# getty of tty1. The greeter is gtkgreet in a sway of its own.
+# config.toml of gui-libs/greetd stays as it is: greetd.service takes this
+# file (greetd.service.d/00gentoo.conf).
+#
+# initial_session: once after the boot, sway of root starts with no
+# login. After its logout, default_session asks for the user. Delete the
+# section to always ask.
+
+[terminal]
+vt = 7
+
+[initial_session]
+command = "sway"
+user = "root"
+
+[default_session]
+command = "sway --config /etc/greetd/sway-config"
+user = "greetd"

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE pkgmetadata SYSTEM "https://www.gentoo.org/dtd/metadata.dtd">
+<pkgmetadata>
+	<maintainer type="person">
+		<email>noktoborus@gmail.com</email>
+	</maintainer>
+	<longdescription>The boot files of the ClockworkPi uConsole in /boot. See gentoo-builder/README.md of the project.</longdescription>
+	<use>
+		<flag name="cm5">For the Raspberry Pi CM5: config.txt and cmdline.txt only; its firmware is in the EEPROM</flag>
+		<flag name="cm4">For the Raspberry Pi CM4: also start4*.elf and fixup4*.dat of the firmware of Raspberry Pi</flag>
+	</use>
+</pkgmetadata>

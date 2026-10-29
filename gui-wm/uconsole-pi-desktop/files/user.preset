@@ -1,0 +1,6 @@
+# The sound server of each user: PipeWire with its pulse server, and
+# WirePlumber. systemctl --global preset-all turns them on; image.sh runs
+# it for the image.
+enable pipewire.socket
+enable pipewire-pulse.socket
+enable wireplumber.service

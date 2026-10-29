@@ -1,0 +1,12 @@
+# /usr/lib/systemd/user/sway-session.target: the session of sway for
+# systemd of the user. sway starts it (50-uconsole.conf); it brings up
+# graphical-session.target and xdg-desktop-autostart.target, so
+# systemd-xdg-autostart-generator runs the files of /etc/xdg/autostart
+# and ~/.config/autostart as services: the agent of polkit, blueman-applet.
+[Unit]
+Description=The session of sway
+Documentation=man:systemd.special(7) man:systemd-xdg-autostart-generator(8)
+BindsTo=graphical-session.target
+Wants=graphical-session-pre.target xdg-desktop-autostart.target
+After=graphical-session-pre.target
+Before=xdg-desktop-autostart.target

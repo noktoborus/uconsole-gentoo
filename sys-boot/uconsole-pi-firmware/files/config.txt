@@ -1,0 +1,36 @@
+# /boot/config.txt of the uConsole, read by the firmware at boot. From
+# the file of the device on 2026-10-19. sys-boot/uconsole-pi-firmware
+# installs it; CONFIG_PROTECT keeps the changes on an update.
+
+[pi4]
+hdmi_enable_4kp60=1
+hdmi_group=2
+hdmi_driver=2
+dtoverlay=clockworkpi-uconsole
+dtoverlay=vc4-kms-v3d-pi4,cma-384
+enable_uart=1
+arm_freq_min=400
+arm_freq=1900
+gpu_mem=256
+over_voltage=5
+
+[pi5]
+dtoverlay=clockworkpi-uconsole-cm5
+dtoverlay=vc4-kms-v3d-pi5,cma-384
+dtparam=uart0
+dtparam=pciex1
+dtparam=pciex1_gen=3
+arm_freq_min=500
+arm_freq=2000
+
+[all]
+dtoverlay=clockworkpi-custom-battery,energy_full_design_uwh=16640000,charge_full_design_uah=3337000
+ignore_lcd=1
+max_framebuffers=2
+disable_overscan=1
+dtparam=audio=on
+dtoverlay=audremap,pins_12_13
+dtoverlay=dwc2,dr_mode=host
+dtparam=ant2
+gpio=10=ip,np
+gpio=9=op,dh

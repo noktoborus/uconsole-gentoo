@@ -1,0 +1,16 @@
+# The services of the system the desktop of the uConsole needs: the
+# network by NetworkManager, DNS by systemd-resolved (NetworkManager gives
+# it the servers of each link), mDNS by avahi (it announces the
+# uConsole; resolved only resolves .local), the login (greetd), the homes
+# of homed,
+# Bluetooth. systemd-networkd is off: it would manage the same links as
+# NetworkManager; this file comes before 90-systemd.preset, which turns it
+# on. image.sh applies this file to the image.
+enable NetworkManager.service
+enable systemd-resolved.service
+enable avahi-daemon.service
+disable systemd-networkd.service
+disable systemd-networkd-wait-online.service
+enable greetd.service
+enable systemd-homed.service
+enable bluetooth.service

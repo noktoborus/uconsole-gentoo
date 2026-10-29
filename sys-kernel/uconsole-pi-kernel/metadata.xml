@@ -5,4 +5,9 @@
 		<email>noktoborus@gmail.com</email>
 	</maintainer>
 	<longdescription>The kernel of the ClockworkPi uConsole, built from a mounted tree. See gentoo-builder/README.md of the project.</longdescription>
+	<use>
+		<flag name="cm5">Build the kernel of the Raspberry Pi CM5 (bcm2712_defconfig, kernel_2712.img)</flag>
+		<flag name="cm4">Build the kernel of the Raspberry Pi CM4 (bcm2711_defconfig, kernel8.img)</flag>
+		<flag name="16k">Build the kernel of the CM5 with 16K pages in place of 4K</flag>
+	</use>
 </pkgmetadata>

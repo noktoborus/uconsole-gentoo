@@ -1,0 +1,22 @@
+#!/bin/sh
+# /usr/bin/backlight: the backlight of the panel of the uConsole,
+# through logind (SetBrightness of the session): the user of the session
+# sets it with no root and no udev rule. The panel has levels 0 to 9
+# (ocp8178_bl.c); 0 is off, so "down" stops at 1.
+#
+#   backlight up | down | <level> | get
+set -eu
+
+dir=$(ls -d /sys/class/backlight/* | head -n 1)
+dev=${dir##*/}
+cur=$(cat "$dir/brightness")
+max=$(cat "$dir/max_brightness")
+case ${1:-get} in
+    get) echo "$cur/$max"; exit 0 ;;
+    up) new=$((cur + 1)) ;;
+    down) new=$((cur - 1)); [ "$new" -ge 1 ] || new=1 ;;
+    *) new=$1 ;;
+esac
+[ "$new" -le "$max" ] || new=$max
+busctl call org.freedesktop.login1 /org/freedesktop/login1/session/auto \
+    org.freedesktop.login1.Session SetBrightness ssu backlight "$dev" "$new"

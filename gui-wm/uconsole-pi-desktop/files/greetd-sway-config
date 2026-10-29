@@ -1,0 +1,12 @@
+# /etc/greetd/sway-config: the sway of the login screen. gtkgreet asks the
+# user and the password; greetd then starts the session of the user, and
+# this sway exits.
+
+# The panel of the uConsole, as in the session (sway-output.conf).
+include /etc/sway/config.d/40-uconsole-output.conf
+
+exec "gtkgreet -l; swaymsg exit"
+
+# Power off or reboot from the login screen: Super+Shift+e.
+bindsym Mod4+Shift+e exec swaynag -t warning -m 'Power' \
+    -b 'Power off' 'systemctl poweroff' -b 'Reboot' 'systemctl reboot'

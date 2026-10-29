@@ -1,4 +1,4 @@
-# virtual/dist-kernel of the uConsole: it points to sys-kernel/uconsole-kernel
+# virtual/dist-kernel of the uConsole: it points to sys-kernel/uconsole-pi-kernel
 # of the same version. A package of a kernel module (linux-mod-r1, USE
 # dist-kernel) depends on virtual/dist-kernel:=, so each new kernel has a
 # new subslot here, and Portage builds those modules again with it. The
@@ -11,4 +11,4 @@ DESCRIPTION="Virtual to depend on the kernel of the uConsole"
 SLOT="0/${PVR}"
 KEYWORDS="~arm64"
 
-RDEPEND="~sys-kernel/uconsole-kernel-${PV}"
+RDEPEND="~sys-kernel/uconsole-pi-kernel-${PV}"
