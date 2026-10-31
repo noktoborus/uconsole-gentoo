@@ -5,7 +5,7 @@
 # of homed,
 # Bluetooth. systemd-networkd is off: it would manage the same links as
 # NetworkManager; this file comes before 90-systemd.preset, which turns it
-# on. The full image applies this file (steps/image/130-services.sh).
+# on. The full image applies this file (steps/image/100-services.sh).
 enable NetworkManager.service
 enable systemd-resolved.service
 enable avahi-daemon.service
