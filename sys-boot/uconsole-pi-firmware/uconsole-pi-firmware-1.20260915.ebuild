@@ -17,7 +17,7 @@ S=${WORKDIR}
 
 LICENSE="GPL-2 cm4? ( raspberrypi-videocore-bin )"
 SLOT="0"
-KEYWORDS="~arm64"
+KEYWORDS="arm64"
 IUSE="cm5 cm4"
 REQUIRED_USE="|| ( cm4 cm5 )"
 RESTRICT="binchecks strip"

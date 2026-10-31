@@ -23,7 +23,7 @@ S=${WORKDIR}/linux-${UCONSOLE_BASE}
 
 LICENSE="GPL-2"
 SLOT="0"
-KEYWORDS="~arm64"
+KEYWORDS="arm64"
 RESTRICT="binchecks strip test"
 IUSE="cm5 cm4 16k"
 REQUIRED_USE="|| ( cm4 cm5 ) 16k? ( cm5 )"

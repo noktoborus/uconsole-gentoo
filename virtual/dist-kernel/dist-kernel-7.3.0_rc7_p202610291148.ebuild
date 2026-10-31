@@ -9,6 +9,6 @@ EAPI=8
 
 DESCRIPTION="Virtual to depend on the kernel of the uConsole"
 SLOT="0/${PVR}"
-KEYWORDS="~arm64"
+KEYWORDS="arm64"
 
 RDEPEND="~sys-kernel/uconsole-pi-kernel-${PV}"

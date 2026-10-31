@@ -23,7 +23,7 @@ S=${WORKDIR}
 
 LICENSE="GPL-2"
 SLOT="0"
-KEYWORDS="~arm64"
+KEYWORDS="arm64"
 
 # sway and its tools; files: Thunar, gvfs for phones (MTP), cameras, the
 # network, the trash, udisks2 mounts by polkit, thunar-volman what is
