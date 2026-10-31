@@ -42,15 +42,10 @@ pkg_postinst() {
 	elog "  SCCACHE_SERVER_TMPDIR=\"/var/tmp/portage/sccache\""
 	elog "  SCCACHE_MAX_FRAME_LENGTH=104857600"
 	elog
-	elog "Packages that must not run under sccache (dev-lang/rust,"
-	elog "dev-util/sccache) take an env file, /etc/portage/env/no-sccache:"
+	elog "Packages that must not run under sccache take a file of their"
+	elog "own, /etc/portage/env/dev-lang/rust and /etc/portage/env/dev-util/sccache:"
 	elog
 	elog "  RUSTC_WRAPPER=\"\""
-	elog
-	elog "and lines in /etc/portage/package.env:"
-	elog
-	elog "  dev-lang/rust no-sccache"
-	elog "  dev-util/sccache no-sccache"
 	elog
 	elog "To see the cache from a shell, set SCCACHE_DIR there too:"
 	elog "  SCCACHE_DIR=/var/cache/sccache sccache --show-stats"
