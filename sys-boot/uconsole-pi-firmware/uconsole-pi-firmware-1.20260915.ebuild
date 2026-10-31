@@ -34,3 +34,16 @@ src_install() {
 	doins "${FILESDIR}"/config.txt "${FILESDIR}"/cmdline.txt
 	newenvd "${FILESDIR}"/${PN}.envd 90${PN}
 }
+
+pkg_postinst() {
+	elog "/boot/cmdline.txt finds the root by its GPT name:"
+	elog "root=PARTLABEL=uconsole-root, the same on each card of the image."
+	elog "With another disk of that name plugged in (a second such card in a"
+	elog "reader of USB), the kernel may take the wrong root. To take the root"
+	elog "of this card only, put its PARTUUID in /boot/cmdline.txt:"
+	elog
+	elog "  findmnt -no PARTUUID /"
+	elog "  sed -i 's|root=PARTLABEL=uconsole-root|root=PARTUUID=<it>|' /boot/cmdline.txt"
+	elog
+	elog "CONFIG_PROTECT keeps the change on updates."
+}
