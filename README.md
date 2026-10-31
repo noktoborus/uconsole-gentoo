@@ -14,7 +14,7 @@ lacks. On the uConsole it is `/var/db/repos/uconsole`.
 ## Set up the uConsole from the base image
 
 The base image has the kernel, the boot files, the firmware of the
-Wi-Fi, and the sources of all of `@uconsole-full` in `/var/cache/distfiles`.
+Wi-Fi, and the sources of all of `@world` of the full system in `/var/cache/distfiles`.
 Log in as root (password `root`).
 
 1. NetworkManager, built here from those sources (no network needed),
@@ -38,7 +38,7 @@ Log in as root (password `root`).
    the image):
 
    ```sh
-   emerge -uDN @uconsole-full
+   emerge -uDN @uconsole-full @world
    etc-update                 # the files of /etc and /boot the packages bring
    ```
 
