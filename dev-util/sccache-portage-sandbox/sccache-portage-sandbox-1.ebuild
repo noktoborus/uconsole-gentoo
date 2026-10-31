@@ -2,7 +2,8 @@
 # systemd-tmpfiles makes them on each boot, owned by portage (emerge runs
 # the compiler as portage, FEATURES=userpriv). /var/tmp/portage may be a
 # tmpfs. The variables of make.conf stay with the user: pkg_postinst
-# names them.
+# names them. The builder writes the same rule and directories in
+# ../../../unidev/Dockerfile: change both.
 
 EAPI=8
 
