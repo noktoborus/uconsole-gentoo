@@ -71,7 +71,7 @@ Log in as root (password `root`).
    ```
 
 7. `rm /etc/motd`, then `reboot`. gtkgreet asks for a user; its password
-   unlocks the keyring (gnome-keyring, `/etc/pam.d/uconsole-greetd`), and
+   unlocks the keyring (gnome-keyring, `pam_gnome_keyring` of pambase), and
    `SSH_AUTH_SOCK` is the agent of gcr (`gcr-ssh-agent.socket`).
 
 More, if wanted:

@@ -4,18 +4,13 @@
 # config.toml of gui-libs/greetd stays as it is: greetd.service takes this
 # file (greetd.service.d/00gentoo.conf).
 #
-# The session of a user takes the PAM service uconsole-greetd: the password
-# of the login unlocks the keyring (/etc/pam.d/uconsole-greetd). The
-# greeter keeps greetd of gui-libs/greetd. No user logs in with no
-# password.
+# The PAM service is greetd of gui-libs/greetd: system-login, where
+# pambase gnome-keyring puts pam_gnome_keyring, so the password of the
+# login unlocks the keyring. No user logs in with no password.
 
 [terminal]
 vt = 7
 
-[general]
-service = "uconsole-greetd"
-
 [default_session]
 command = "sway --config /etc/greetd/sway-config"
 user = "greetd"
-service = "greetd"

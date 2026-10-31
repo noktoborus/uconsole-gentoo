@@ -15,7 +15,7 @@
 
 EAPI=8
 
-inherit eapi9-ver pam systemd
+inherit eapi9-ver systemd
 
 DESCRIPTION="The desktop of the ClockworkPi uConsole: sway, greetd, the presets of its services"
 HOMEPAGE="https://www.clockworkpi.com/uconsole"
@@ -57,7 +57,7 @@ RDEPEND="
 	gui-libs/greetd
 	gui-apps/gtkgreet
 	sys-apps/systemd[homed]
-	sys-auth/pambase[homed]
+	sys-auth/pambase[homed,gnome-keyring]
 	sys-fs/btrfs-progs
 	gnome-base/gnome-keyring[pam]
 	app-crypt/gcr:4
@@ -75,7 +75,6 @@ src_install() {
 	newins "${FILESDIR}"/greetd-sway-config sway-config
 	newins "${FILESDIR}"/greetd-environments environments
 	systemd_install_serviced "${FILESDIR}"/greetd-service.conf greetd.service
-	newpamd "${FILESDIR}"/greetd-pam uconsole-greetd
 
 	insinto /etc/profile.d
 	newins "${FILESDIR}"/ssh-agent.sh uconsole-ssh-agent.sh
