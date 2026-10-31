@@ -2,7 +2,7 @@
 # turned, the session for systemd, idle and lock, the keys of the
 # backlight), the login by greetd and gtkgreet (its password unlocks the
 # keyring of gnome-keyring, with gcr-ssh-agent the agent of SSH), the
-# presets of the services it needs, DNS by
+# presets of the services it needs, a swap of 1.5 GiB in zram, DNS by
 # systemd-resolved (pkg_postinst points /etc/resolv.conf to it), and
 # Flathub as a remote of Flatpak for the system (nothing is installed from
 # it). Its
@@ -83,6 +83,9 @@ src_install() {
 	# name in /etc/flatpak/remotes.d/ takes precedence
 	insinto /usr/share/flatpak/remotes.d
 	doins "${FILESDIR}"/flathub.flatpakrepo
+
+	insinto "$(systemd_get_utildir)"/zram-generator.conf.d
+	newins "${FILESDIR}"/zram-generator.conf 50-uconsole.conf
 
 	insinto "$(systemd_get_utildir)"/resolved.conf.d
 	newins "${FILESDIR}"/resolved.conf 50-uconsole.conf
