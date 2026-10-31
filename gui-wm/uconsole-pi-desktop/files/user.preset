@@ -4,3 +4,8 @@
 enable pipewire.socket
 enable pipewire-pulse.socket
 enable wireplumber.service
+# The keyring of each user (passwords by the Secret Service, unlocked by
+# the password of the login, /etc/pam.d/uconsole-greetd) and its agent
+# of SSH.
+enable gnome-keyring-daemon.socket
+enable gcr-ssh-agent.socket

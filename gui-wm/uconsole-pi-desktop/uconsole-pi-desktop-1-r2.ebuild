@@ -1,7 +1,8 @@
 # The desktop of the ClockworkPi uConsole: sway for each user (the panel
 # turned, the session for systemd, idle and lock, the keys of the
-# backlight), the login by greetd and gtkgreet (root logs in at the boot
-# with no password), the presets of the services it needs, DNS by
+# backlight), the login by greetd and gtkgreet (its password unlocks the
+# keyring of gnome-keyring, with gcr-ssh-agent the agent of SSH), the
+# presets of the services it needs, DNS by
 # systemd-resolved (pkg_postinst points /etc/resolv.conf to it), and
 # Flathub as a remote of Flatpak for the system (nothing is installed from
 # it). Its
@@ -14,7 +15,7 @@
 
 EAPI=8
 
-inherit systemd
+inherit pam systemd
 
 DESCRIPTION="The desktop of the ClockworkPi uConsole: sway, greetd, the presets of its services"
 HOMEPAGE="https://www.clockworkpi.com/uconsole"
@@ -30,7 +31,7 @@ KEYWORDS="~arm64"
 # polkit asks the password; Flatpak and the portals; Bluetooth; the sound
 # by PipeWire; the login; systemd-homed, its LUKS homes have btrfs; the
 # network by NetworkManager; mDNS and DNS-SD by avahi (USE zeroconf of
-# CUPS, gvfs, PipeWire take it).
+# CUPS, gvfs, PipeWire take it); the keyring and the agent of SSH.
 RDEPEND="
 	net-misc/networkmanager
 	net-dns/avahi
@@ -58,6 +59,8 @@ RDEPEND="
 	sys-apps/systemd[homed]
 	sys-auth/pambase[homed]
 	sys-fs/btrfs-progs
+	gnome-base/gnome-keyring[pam]
+	app-crypt/gcr:4
 "
 
 src_install() {
@@ -72,6 +75,10 @@ src_install() {
 	newins "${FILESDIR}"/greetd-sway-config sway-config
 	newins "${FILESDIR}"/greetd-environments environments
 	systemd_install_serviced "${FILESDIR}"/greetd-service.conf greetd.service
+	newpamd "${FILESDIR}"/greetd-pam uconsole-greetd
+
+	insinto /etc/profile.d
+	newins "${FILESDIR}"/ssh-agent.sh uconsole-ssh-agent.sh
 
 	# flatpak-remote(5): a remote of the system, preconfigured; the same
 	# name in /etc/flatpak/remotes.d/ takes precedence
@@ -114,10 +121,19 @@ pkg_postinst() {
 		elog "      systemd-networkd.service \\"
 		elog "      systemd-networkd-wait-online.service greetd.service \\"
 		elog "      systemd-homed.service bluetooth.service"
-		elog "  systemctl --global preset pipewire.socket pipewire-pulse.socket wireplumber.service"
+		elog "  systemctl --global preset pipewire.socket pipewire-pulse.socket wireplumber.service \\"
+		elog "      gnome-keyring-daemon.socket gcr-ssh-agent.socket"
 		elog "  systemctl set-default graphical.target"
-		elog
-		elog "greetd starts sway of root at the boot with no password"
-		elog "(/etc/greetd/uconsole.toml, initial_session)."
 	fi
+
+	local v
+	for v in ${REPLACING_VERSIONS}; do
+		ver_test "${v}" -lt 1-r2 || continue
+		elog "The keyring and the agent of SSH of each user:"
+		elog
+		elog "  systemctl --global preset gnome-keyring-daemon.socket gcr-ssh-agent.socket"
+		elog
+		elog "root no longer logs in at the boot: greetd asks for the user."
+		break
+	done
 }

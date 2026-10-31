@@ -8,7 +8,7 @@ lacks. On the uConsole it is `/var/db/repos/uconsole`.
 | `sys-kernel/uconsole-pi-kernel` | the kernels of the CM5 and the CM4 (USE `cm5`, `cm4`, `16k`) in `/boot`, their modules |
 | `virtual/dist-kernel` | the packages of modules build again with each kernel |
 | `sys-boot/uconsole-pi-firmware` | `/boot/config.txt`, `/boot/cmdline.txt`, the firmware of the CM4 |
-| `gui-wm/uconsole-pi-desktop` | sway, greetd, Flathub, DNS by resolved, mDNS by avahi, the presets of the services; its dependencies are the desktop |
+| `gui-wm/uconsole-pi-desktop` | sway, greetd, the keyring and the agent of SSH, Flathub, DNS by resolved, mDNS by avahi, the presets of the services; its dependencies are the desktop |
 | `dev-util/sccache-portage-sandbox` | the directories and the sandbox rule of sccache |
 
 ## Set up the uConsole from the base image
@@ -49,7 +49,8 @@ Log in as root (password `root`).
        avahi-daemon.service systemd-networkd.service \
        systemd-networkd-wait-online.service greetd.service \
        systemd-homed.service bluetooth.service
-   systemctl --global preset pipewire.socket pipewire-pulse.socket wireplumber.service
+   systemctl --global preset pipewire.socket pipewire-pulse.socket wireplumber.service \
+       gnome-keyring-daemon.socket gcr-ssh-agent.socket
    systemctl set-default graphical.target
    ```
 
@@ -69,8 +70,9 @@ Log in as root (password `root`).
    homectl create user --storage=luks --member-of=wheel,video,audio,input
    ```
 
-7. `rm /etc/motd`, then `reboot`. greetd starts sway of root with no
-   password; after its logout gtkgreet asks for a user.
+7. `rm /etc/motd`, then `reboot`. gtkgreet asks for a user; its password
+   unlocks the keyring (gnome-keyring, `/etc/pam.d/uconsole-greetd`), and
+   `SSH_AUTH_SOCK` is the agent of gcr (`gcr-ssh-agent.socket`).
 
 More, if wanted:
 

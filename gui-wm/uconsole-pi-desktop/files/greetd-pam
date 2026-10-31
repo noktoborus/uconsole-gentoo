@@ -1,0 +1,10 @@
+# /etc/pam.d/uconsole-greetd: the session of a user that greetd starts
+# (general.service of /etc/greetd/uconsole.toml). The login of the
+# system, and gnome-keyring: auth keeps the password, session unlocks the
+# keyring with it (and starts the daemon if its socket has not).
+auth		include		system-local-login
+auth		optional	pam_gnome_keyring.so
+account		include		system-local-login
+password	include		system-local-login
+session		include		system-local-login
+session		optional	pam_gnome_keyring.so auto_start
