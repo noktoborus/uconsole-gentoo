@@ -6,7 +6,7 @@
 # systemd-resolved (pkg_postinst points /etc/resolv.conf to it), and
 # Flathub as a remote of Flatpak for the system (nothing is installed from
 # it). Its
-# RDEPEND are the programs of the desktop: the set @uconsole takes this
+# RDEPEND are the programs of the desktop: the set @uconsole-full takes this
 # package only.
 #
 # files/flathub.flatpakrepo: https://dl.flathub.org/repo/flathub.flatpakrepo
