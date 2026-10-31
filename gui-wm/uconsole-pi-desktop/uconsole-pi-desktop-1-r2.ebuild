@@ -15,7 +15,7 @@
 
 EAPI=8
 
-inherit pam systemd
+inherit eapi9-ver pam systemd
 
 DESCRIPTION="The desktop of the ClockworkPi uConsole: sway, greetd, the presets of its services"
 HOMEPAGE="https://www.clockworkpi.com/uconsole"
@@ -124,16 +124,11 @@ pkg_postinst() {
 		elog "  systemctl --global preset pipewire.socket pipewire-pulse.socket wireplumber.service \\"
 		elog "      gnome-keyring-daemon.socket gcr-ssh-agent.socket"
 		elog "  systemctl set-default graphical.target"
-	fi
-
-	local v
-	for v in ${REPLACING_VERSIONS}; do
-		ver_test "${v}" -lt 1-r2 || continue
+	elif ver_replacing -lt 1-r2; then
 		elog "The keyring and the agent of SSH of each user:"
 		elog
 		elog "  systemctl --global preset gnome-keyring-daemon.socket gcr-ssh-agent.socket"
 		elog
 		elog "root no longer logs in at the boot: greetd asks for the user."
-		break
-	done
+	fi
 }
