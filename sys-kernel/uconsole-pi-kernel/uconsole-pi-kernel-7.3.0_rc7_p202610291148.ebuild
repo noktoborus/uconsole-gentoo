@@ -42,7 +42,7 @@ BDEPEND="
 # EEPROM
 RDEPEND="sys-boot/uconsole-pi-firmware[cm4?,cm5?]"
 
-# files/ sha256 (kernel/bump.sh): c8bf9991459ab855febe84827cf9bf15e13f4b04560603cd5c8cb1502a000f9a
+# files/ sha256 (kernel/bump.sh): b1f7e3d8c08c80af7f2c77e161047072277441eb948a244ce5133ecc603707d1
 
 # The kernels to build, one line each: <platform>, its defconfig, the name
 # of its kernel file (the name the firmware looks for: kernel_2712.img on
