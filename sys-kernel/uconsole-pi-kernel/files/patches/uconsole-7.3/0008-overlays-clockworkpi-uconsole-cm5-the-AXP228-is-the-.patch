@@ -1,0 +1,27 @@
+From 1810671c215cb63e0a07632f2d680b1f2f04bf6c Mon Sep 17 00:00:00 2001
+From: Noktoborus <noktoborus@gmail.com>
+Date: Sun, 1 Nov 2026 10:13:18 +0000
+Subject: [PATCH] overlays: clockworkpi-uconsole-cm5: the AXP228 is the system
+ power controller
+
+The AXP228 powers the whole board off; with the property its power-off
+handler runs before the halt of the watchdog of the BCM2712.
+---
+ arch/arm/boot/dts/overlays/clockworkpi-uconsole-cm5-overlay.dts | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm/boot/dts/overlays/clockworkpi-uconsole-cm5-overlay.dts b/arch/arm/boot/dts/overlays/clockworkpi-uconsole-cm5-overlay.dts
+index 09a9df9b4ec..d8f1ad36f7e 100644
+--- a/arch/arm/boot/dts/overlays/clockworkpi-uconsole-cm5-overlay.dts
++++ b/arch/arm/boot/dts/overlays/clockworkpi-uconsole-cm5-overlay.dts
+@@ -25,6 +25,7 @@
+ 				#interrupt-cells = <1>;
+ 				compatible = "x-powers,axp228", "x-powers,axp223", "x-powers,axp221";
+ 				reg = <0x34>;
++				system-power-controller;
+ 				interrupt-parent = <&rp1_gpio>;
+ 				interrupts = <2 8>; /* Adjusted IRQ for RP1 */
+ 				irq-gpios = <&rp1_gpio 2 0>;
+-- 
+2.39.5
+

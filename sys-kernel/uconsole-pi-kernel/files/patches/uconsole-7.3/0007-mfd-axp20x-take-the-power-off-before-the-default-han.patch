@@ -1,0 +1,46 @@
+From 0ad7861aa1028f2f3289b070e357237a10e31e51 Mon Sep 17 00:00:00 2001
+From: Noktoborus <noktoborus@gmail.com>
+Date: Sun, 1 Nov 2026 10:13:08 +0000
+Subject: [PATCH] mfd: axp20x: take the power-off before the default handlers
+ when system power controller
+
+On 7.3 the watchdog of the BCM2712 (bcm2835_wdt) registers its power-off
+handler, a halt of the SoC by the firmware, with SYS_OFF_PRIO_DEFAULT when
+its node is the system power controller. It probes first; the handler of
+the AXP gets -EBUSY, and poweroff leaves the board of the uConsole on.
+On 6.12 the watchdog set pm_power_off only when it was empty, and PSCI had
+set it.
+
+A PMIC with system-power-controller in its node registers its handler
+with SYS_OFF_PRIO_DEFAULT + 1: it runs first and powers the whole board
+off. Without the property nothing changes.
+---
+ drivers/mfd/axp20x.c | 11 ++++++++++-
+ 1 file changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/mfd/axp20x.c b/drivers/mfd/axp20x.c
+index 50df66de24e..f46c2b1e184 100644
+--- a/drivers/mfd/axp20x.c
++++ b/drivers/mfd/axp20x.c
+@@ -1458,8 +1458,17 @@ int axp20x_device_probe(struct axp20x_dev *axp20x)
+ 		return ret;
+ 	}
+ 
++	/*
++	 * A PMIC that is the system power controller powers the whole board
++	 * off: its handler runs before the others of the default priority.
++	 * On the BCM2712 the watchdog registers a halt of the SoC there
++	 * first, and this one would get -EBUSY.
++	 */
+ 	if (axp20x->variant != AXP288_ID)
+-		devm_register_power_off_handler(axp20x->dev, axp20x_power_off, axp20x);
++		devm_register_sys_off_handler(axp20x->dev, SYS_OFF_MODE_POWER_OFF,
++					      of_device_is_system_power_controller(axp20x->dev->of_node) ?
++					      SYS_OFF_PRIO_DEFAULT + 1 : SYS_OFF_PRIO_DEFAULT,
++					      axp20x_power_off, axp20x);
+ 
+ 	dev_info(axp20x->dev, "AXP20X driver loaded\n");
+ 
+-- 
+2.39.5
+
