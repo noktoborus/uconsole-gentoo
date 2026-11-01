@@ -27,9 +27,10 @@ LICENSE="GPL-2"
 SLOT="0"
 KEYWORDS="arm64"
 
-# sway and its tools: the notifications (swaync), the screenshots and the
+# sway and its tools: the menu of programs (rofi), the notifications (swaync), the screenshots and the
 # clipboard (grim, slurp, wl-clipboard), the folders of each user
-# (xdg-user-dirs); files: Thunar, gvfs for phones (MTP), cameras, the
+# (xdg-user-dirs); files: Thunar and its archives (xarchiver), the
+# pictures (ristretto) and the text (mousepad), gvfs for phones (MTP), cameras, the
 # network, the trash, udisks2 mounts by polkit, thunar-volman what is
 # plugged in (at once: its defaults here), tumbler and ffmpegthumbnailer
 # the thumbnails, the agent of polkit asks the password; Flatpak and the
@@ -48,6 +49,7 @@ RDEPEND="
 	gui-apps/swaylock
 	gui-apps/foot
 	gui-apps/swaync
+	x11-misc/rofi
 	gui-apps/grim
 	gui-apps/slurp
 	gui-apps/wl-clipboard
@@ -55,6 +57,10 @@ RDEPEND="
 	xfce-base/thunar
 	xfce-base/thunar-volman
 	xfce-base/tumbler
+	xfce-extra/thunar-archive-plugin
+	app-arch/xarchiver
+	media-gfx/ristretto
+	app-editors/mousepad
 	gnome-base/gvfs
 	sys-fs/udisks
 	media-video/ffmpegthumbnailer
