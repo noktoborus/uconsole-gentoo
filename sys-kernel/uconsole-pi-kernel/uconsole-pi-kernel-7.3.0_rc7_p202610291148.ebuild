@@ -6,8 +6,8 @@
 # sys-boot/uconsole-pi-firmware puts its files.
 #
 # It needs nothing but this directory: the source is the tarball of one
-# commit of Raspberry Pi, files/ has the series, the fragments of the
-# configuration and the splash built into the kernel. kernel/bump.sh gives
+# commit of Raspberry Pi, files/ has the series and the fragments of the
+# configuration. kernel/bump.sh gives
 # it a new version when files/ or the commit changes.
 
 EAPI=8
@@ -42,7 +42,7 @@ BDEPEND="
 # EEPROM
 RDEPEND="sys-boot/uconsole-pi-firmware[cm4?,cm5?]"
 
-# files/ sha256 (kernel/bump.sh): b1f7e3d8c08c80af7f2c77e161047072277441eb948a244ce5133ecc603707d1
+# files/ sha256 (kernel/bump.sh): 12daaa7ffc572b0e359c2078c8f1af31ffb520456e1a2c44f42657f3334209e5
 
 # The kernels to build, one line each: <platform>, its defconfig, the name
 # of its kernel file (the name the firmware looks for: kernel_2712.img on
@@ -57,11 +57,6 @@ pkg_setup() {
 
 src_prepare() {
 	eapply "${FILESDIR}"/patches/uconsole-7.3
-
-	# built into the kernel (CONFIG_EXTRA_FIRMWARE_DIR of uconsole.config)
-	mkdir firmware-uconsole || die
-	cp "${FILESDIR}"/uconsole-splash.tga firmware-uconsole/ || die
-
 	eapply_user
 }
 
