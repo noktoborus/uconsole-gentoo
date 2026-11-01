@@ -5,7 +5,8 @@
 # presets of the services it needs, a swap of 1.5 GiB in zram, DNS by
 # systemd-resolved (pkg_postinst points /etc/resolv.conf to it), and
 # Flathub as a remote of Flatpak for the system (nothing is installed from
-# it). Its
+# it), and the boot shown by Plymouth (its theme of default) up to the
+# greeter. Its
 # RDEPEND are the programs of the desktop: the set @uconsole-full takes this
 # package only.
 #
@@ -29,7 +30,7 @@ KEYWORDS="arm64"
 # network, the trash, udisks2 mounts by polkit, thunar-volman what is
 # plugged in, tumbler and ffmpegthumbnailer the thumbnails, the agent of
 # polkit asks the password; Flatpak and the portals; Bluetooth; the sound
-# by PipeWire; the login; systemd-homed, its LUKS homes have btrfs; the
+# by PipeWire; the login, and Plymouth before it; systemd-homed, its LUKS homes have btrfs; the
 # network by NetworkManager; mDNS and DNS-SD by avahi (USE zeroconf of
 # CUPS, gvfs, PipeWire take it); the keyring and the agent of SSH.
 RDEPEND="
@@ -56,6 +57,7 @@ RDEPEND="
 	media-video/wireplumber
 	gui-libs/greetd
 	gui-apps/gtkgreet
+	sys-boot/plymouth
 	sys-apps/systemd[homed]
 	sys-auth/pambase[homed,gnome-keyring]
 	sys-fs/btrfs-progs
@@ -75,6 +77,7 @@ src_install() {
 	newins "${FILESDIR}"/greetd-sway-config sway-config
 	newins "${FILESDIR}"/greetd-environments environments
 	systemd_install_serviced "${FILESDIR}"/greetd-service.conf greetd.service
+	systemd_install_serviced "${FILESDIR}"/plymouth-quit-service.conf plymouth-quit.service
 
 	insinto /etc/profile.d
 	newins "${FILESDIR}"/ssh-agent.sh uconsole-ssh-agent.sh

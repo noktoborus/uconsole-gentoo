@@ -1,1 +1,1 @@
-console=tty1 root=PARTLABEL=uconsole-root rootfstype=ext4 ro rootwait fsck.repair=yes quiet loglevel=3 logo.nologo vt.global_cursor_default=0
+console=tty1 root=PARTLABEL=uconsole-root rootfstype=ext4 ro rootwait fsck.repair=yes quiet splash plymouth.ignore-serial-consoles loglevel=3 logo.nologo vt.global_cursor_default=0

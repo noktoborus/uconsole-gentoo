@@ -1,7 +1,8 @@
 # The files of the FAT partition of the ClockworkPi uConsole, /boot, as
 # sys-boot/raspberrypi-firmware puts them, with the files of the uConsole:
 # config.txt (the panel, the battery, the sound, USB host) and cmdline.txt
-# (the root by its GPT name uconsole-root, a quiet console).
+# (the root by its GPT name uconsole-root, a quiet console, splash for
+# Plymouth of the full image).
 # CONFIG_PROTECT keeps the changes of both on an update. The version is
 # the one of the firmware of Raspberry Pi; the CM4 takes its start4*.elf
 # and fixup4*.dat from it, the CM5 has them in its EEPROM.
