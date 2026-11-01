@@ -27,14 +27,18 @@ LICENSE="GPL-2"
 SLOT="0"
 KEYWORDS="arm64"
 
-# sway and its tools; files: Thunar, gvfs for phones (MTP), cameras, the
+# sway and its tools: the notifications (swaync), the screenshots and the
+# clipboard (grim, slurp, wl-clipboard), the folders of each user
+# (xdg-user-dirs); files: Thunar, gvfs for phones (MTP), cameras, the
 # network, the trash, udisks2 mounts by polkit, thunar-volman what is
-# plugged in, tumbler and ffmpegthumbnailer the thumbnails, the agent of
-# polkit asks the password; Flatpak and the portals; Bluetooth; the sound
-# by PipeWire, the UCM of the card uConsole (the speakers or the
-# headphones by the jack); the login, and Plymouth before it; systemd-homed, its LUKS homes have btrfs; the
-# network by NetworkManager; mDNS and DNS-SD by avahi (USE zeroconf of
-# CUPS, gvfs, PipeWire take it); the keyring and the agent of SSH.
+# plugged in (at once: its defaults here), tumbler and ffmpegthumbnailer
+# the thumbnails, the agent of polkit asks the password; Flatpak and the
+# portals; Bluetooth; the sound by PipeWire and its mixer pwvucontrol, the
+# UCM of the card uConsole (the speakers or the headphones by the jack);
+# the login, and Plymouth before it; systemd-homed, its LUKS homes have
+# btrfs; the network by NetworkManager; mDNS and DNS-SD by avahi (USE
+# zeroconf of CUPS, gvfs, PipeWire take it); the keyring and the agent of
+# SSH.
 RDEPEND="
 	net-misc/networkmanager
 	net-dns/avahi
@@ -43,6 +47,11 @@ RDEPEND="
 	gui-apps/swayidle
 	gui-apps/swaylock
 	gui-apps/foot
+	gui-apps/swaync
+	gui-apps/grim
+	gui-apps/slurp
+	gui-apps/wl-clipboard
+	x11-misc/xdg-user-dirs
 	xfce-base/thunar
 	xfce-base/thunar-volman
 	xfce-base/tumbler
@@ -57,6 +66,7 @@ RDEPEND="
 	net-wireless/blueman
 	media-video/pipewire
 	media-video/wireplumber
+	media-sound/pwvucontrol
 	media-libs/alsa-ucm-conf
 	gui-libs/greetd
 	gui-apps/gtkgreet
@@ -89,6 +99,9 @@ src_install() {
 	insinto "$(systemd_get_utildir)"/logind.conf.d
 	newins "${FILESDIR}"/logind-power-key.conf 50-uconsole.conf
 	udev_newrules "${FILESDIR}"/power-key.rules 60-uconsole-power-key.rules
+
+	insinto /etc/xdg/xfce4/xfconf/xfce-perchannel-xml
+	doins "${FILESDIR}"/thunar-volman.xml
 
 	insinto /etc/profile.d
 	newins "${FILESDIR}"/ssh-agent.sh uconsole-ssh-agent.sh
@@ -138,8 +151,8 @@ pkg_postinst() {
 		elog "      avahi-daemon.service \\"
 		elog "      systemd-networkd.service \\"
 		elog "      systemd-networkd-wait-online.service greetd.service \\"
-		elog "      systemd-homed.service bluetooth.service"
-		elog "  systemctl --global preset pipewire.socket pipewire-pulse.socket wireplumber.service \\"
+		elog "      systemd-homed.service bluetooth.service fstrim.timer"
+		elog "  systemctl --global preset pipewire.socket pipewire-pulse.socket wireplumber.service swaync.service \\"
 		elog "      gnome-keyring-daemon.socket gcr-ssh-agent.socket"
 		elog "  systemctl set-default graphical.target"
 	elif ver_replacing -lt 1-r2; then

@@ -4,6 +4,7 @@
 enable pipewire.socket
 enable pipewire-pulse.socket
 enable wireplumber.service
+enable swaync.service
 # The keyring of each user (passwords by the Secret Service, unlocked by
 # the password of the login, pam_gnome_keyring of pambase) and its agent
 # of SSH.

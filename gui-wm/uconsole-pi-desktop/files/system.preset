@@ -14,3 +14,5 @@ disable systemd-networkd-wait-online.service
 enable greetd.service
 enable systemd-homed.service
 enable bluetooth.service
+# TRIM of the SD card and the NVMe once a week.
+enable fstrim.timer
