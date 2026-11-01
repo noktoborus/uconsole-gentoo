@@ -13,6 +13,7 @@ arm_freq_min=400
 arm_freq=1900
 gpu_mem=256
 over_voltage=5
+dtoverlay=audremap,pins_12_13
 
 [pi5]
 dtoverlay=clockworkpi-uconsole-cm5
@@ -29,8 +30,10 @@ ignore_lcd=1
 max_framebuffers=2
 disable_overscan=1
 dtparam=audio=on
-dtoverlay=audremap,pins_12_13
 dtoverlay=dwc2,dr_mode=host
 dtparam=ant2
+# the headphone jack (high: headphones in), the amplifier of the speakers
+# off until the driver of the sound card takes it (the overlay of the CM5)
 gpio=10=ip,np
+gpio=11=op,dl
 gpio=9=op,dh

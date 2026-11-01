@@ -30,7 +30,8 @@ KEYWORDS="arm64"
 # network, the trash, udisks2 mounts by polkit, thunar-volman what is
 # plugged in, tumbler and ffmpegthumbnailer the thumbnails, the agent of
 # polkit asks the password; Flatpak and the portals; Bluetooth; the sound
-# by PipeWire; the login, and Plymouth before it; systemd-homed, its LUKS homes have btrfs; the
+# by PipeWire, the UCM of the card uConsole (the speakers or the
+# headphones by the jack); the login, and Plymouth before it; systemd-homed, its LUKS homes have btrfs; the
 # network by NetworkManager; mDNS and DNS-SD by avahi (USE zeroconf of
 # CUPS, gvfs, PipeWire take it); the keyring and the agent of SSH.
 RDEPEND="
@@ -55,6 +56,7 @@ RDEPEND="
 	net-wireless/blueman
 	media-video/pipewire
 	media-video/wireplumber
+	media-libs/alsa-ucm-conf
 	gui-libs/greetd
 	gui-apps/gtkgreet
 	sys-boot/plymouth
@@ -78,6 +80,10 @@ src_install() {
 	newins "${FILESDIR}"/greetd-environments environments
 	systemd_install_serviced "${FILESDIR}"/greetd-service.conf greetd.service
 	systemd_install_serviced "${FILESDIR}"/plymouth-quit-service.conf plymouth-quit.service
+
+	insinto /usr/share/alsa/ucm2/uConsole
+	doins "${FILESDIR}"/ucm/uConsole.conf "${FILESDIR}"/ucm/HiFi.conf
+	dosym ../../uConsole/uConsole.conf /usr/share/alsa/ucm2/conf.d/uConsole/uConsole.conf
 
 	insinto /etc/profile.d
 	newins "${FILESDIR}"/ssh-agent.sh uconsole-ssh-agent.sh

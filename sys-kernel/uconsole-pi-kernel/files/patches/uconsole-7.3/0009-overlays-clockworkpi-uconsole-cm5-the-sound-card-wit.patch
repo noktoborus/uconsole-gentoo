@@ -1,0 +1,87 @@
+From bb6f783d77b220bcbc180e2721b4489fc3eea353 Mon Sep 17 00:00:00 2001
+From: Noktoborus <noktoborus@gmail.com>
+Date: Sun, 1 Nov 2026 12:23:58 +0000
+Subject: [PATCH] overlays: clockworkpi-uconsole-cm5: the sound card with the
+ amplifier and the headphone jack
+
+The uConsole switches the amplifier of its speakers by GPIO11 and reads
+the headphone jack on GPIO10 (high: headphones in); the image of Rex did
+it by a script that polled GPIO10. The overlay describes the card
+"uConsole" itself: RP1 audio out on GPIO12 and 13 with the dummy codec,
+simple-audio-amplifier on GPIO11 as an aux device, the jack of
+hp-det-gpios, and switches for the pins Speaker and Headphones. DAPM
+powers the amplifier only while the pin Speaker is on and sound plays;
+the UCM of the card picks the pin by the jack. audremap-pi5 is not
+needed on the CM5 with it.
+---
+ .../clockworkpi-uconsole-cm5-overlay.dts      | 56 +++++++++++++++++++
+ 1 file changed, 56 insertions(+)
+
+diff --git a/arch/arm/boot/dts/overlays/clockworkpi-uconsole-cm5-overlay.dts b/arch/arm/boot/dts/overlays/clockworkpi-uconsole-cm5-overlay.dts
+index d8f1ad36f7e..70de6810aa8 100644
+--- a/arch/arm/boot/dts/overlays/clockworkpi-uconsole-cm5-overlay.dts
++++ b/arch/arm/boot/dts/overlays/clockworkpi-uconsole-cm5-overlay.dts
+@@ -191,4 +191,60 @@
+ 			function = "gpio";
+ 		};
+ 	};
++
++	/*
++	 * The sound: RP1 audio out (PWM on GPIO12 and 13) through the dummy
++	 * codec, the amplifier of the speakers on GPIO11 (on while the pin
++	 * Speaker is on and sound plays), the headphone jack on GPIO10 (high:
++	 * headphones in). The pins Speaker and Headphones have switches; the
++	 * UCM of the card turns one of them on by the jack. audremap-pi5 is
++	 * not loaded on the CM5.
++	 */
++	fragment@6 {
++		target = <&rp1_audio_out>;
++		__overlay__ {
++			pinctrl-0 = <&rp1_audio_out_12_13>;
++			pinctrl-names = "default";
++			status = "okay";
++		};
++	};
++	fragment@7 {
++		target-path = "/";
++		__overlay__ {
++			uconsole_audio_codec: uconsole-audio-codec {
++				compatible = "linux,spdif-dit";
++				#sound-dai-cells = <0>;
++			};
++			uconsole_speaker_amp: uconsole-speaker-amp {
++				compatible = "simple-audio-amplifier";
++				enable-gpios = <&rp1_gpio 11 GPIO_ACTIVE_HIGH>;
++				sound-name-prefix = "Speaker Amp";
++			};
++			uconsole-sound {
++				compatible = "simple-audio-card";
++				simple-audio-card,name = "uConsole";
++				simple-audio-card,format = "left_j";
++				simple-audio-card,bitclock-master = <&uconsole_audio_cpu>;
++				simple-audio-card,frame-master = <&uconsole_audio_cpu>;
++				simple-audio-card,aux-devs = <&uconsole_speaker_amp>;
++				simple-audio-card,widgets =
++					"Speaker", "Speaker",
++					"Headphone", "Headphones";
++				simple-audio-card,routing =
++					"Speaker Amp INL", "spdif-out",
++					"Speaker Amp INR", "spdif-out",
++					"Speaker", "Speaker Amp OUTL",
++					"Speaker", "Speaker Amp OUTR",
++					"Headphones", "spdif-out";
++				simple-audio-card,pin-switches = "Speaker", "Headphones";
++				simple-audio-card,hp-det-gpios = <&rp1_gpio 10 GPIO_ACTIVE_HIGH>;
++				uconsole_audio_cpu: simple-audio-card,cpu {
++					sound-dai = <&rp1_audio_out>;
++				};
++				simple-audio-card,codec {
++					sound-dai = <&uconsole_audio_codec>;
++				};
++			};
++		};
++	};
+ };
+-- 
+2.39.5
+
