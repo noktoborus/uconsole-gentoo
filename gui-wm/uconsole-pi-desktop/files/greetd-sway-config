@@ -7,6 +7,9 @@ include /etc/sway/config.d/40-uconsole-output.conf
 
 exec "gtkgreet -l; swaymsg exit"
 
+# A short press of the power key: the panel off or on.
+bindsym --release XF86PowerOff exec uconsole-screen-toggle
+
 # Power off or reboot from the login screen: Super+Shift+e.
 bindsym Mod4+Shift+e exec swaynag -t warning -m 'Power' \
     -b 'Power off' 'systemctl poweroff' -b 'Reboot' 'systemctl reboot'

@@ -5,8 +5,9 @@
 # presets of the services it needs, a swap of 1.5 GiB in zram, DNS by
 # systemd-resolved (pkg_postinst points /etc/resolv.conf to it), and
 # Flathub as a remote of Flatpak for the system (nothing is installed from
-# it), and the boot shown by Plymouth (its theme of default) up to the
-# greeter. Its
+# it), the boot shown by Plymouth (its theme of default) up to the
+# greeter, and the power key: a short press locks and turns the panel off
+# or on, 5 s power off (logind), 10 s the cut of the AXP228. Its
 # RDEPEND are the programs of the desktop: the set @uconsole-full takes this
 # package only.
 #
@@ -16,7 +17,7 @@
 
 EAPI=8
 
-inherit eapi9-ver systemd
+inherit eapi9-ver systemd udev
 
 DESCRIPTION="The desktop of the ClockworkPi uConsole: sway, greetd, the presets of its services"
 HOMEPAGE="https://www.clockworkpi.com/uconsole"
@@ -72,7 +73,7 @@ src_install() {
 	newins "${FILESDIR}"/sway-output.conf 40-uconsole-output.conf
 	newins "${FILESDIR}"/sway-uconsole.conf 50-uconsole.conf
 	systemd_douserunit "${FILESDIR}"/sway-session.target
-	dobin "${FILESDIR}"/backlight
+	dobin "${FILESDIR}"/backlight "${FILESDIR}"/uconsole-screen-toggle
 
 	insinto /etc/greetd
 	newins "${FILESDIR}"/greetd-uconsole.toml uconsole.toml
@@ -84,6 +85,10 @@ src_install() {
 	insinto /usr/share/alsa/ucm2/uConsole
 	doins "${FILESDIR}"/ucm/uConsole.conf "${FILESDIR}"/ucm/HiFi.conf
 	dosym ../../uConsole/uConsole.conf /usr/share/alsa/ucm2/conf.d/uConsole/uConsole.conf
+
+	insinto "$(systemd_get_utildir)"/logind.conf.d
+	newins "${FILESDIR}"/logind-power-key.conf 50-uconsole.conf
+	udev_newrules "${FILESDIR}"/power-key.rules 60-uconsole-power-key.rules
 
 	insinto /etc/profile.d
 	newins "${FILESDIR}"/ssh-agent.sh uconsole-ssh-agent.sh
@@ -108,6 +113,8 @@ src_install() {
 }
 
 pkg_postinst() {
+	udev_reload
+
 	# DNS by systemd-resolved: NetworkManager sees the link and gives the
 	# servers to resolved (dns=systemd-resolved by default then). An
 	# /etc/resolv.conf that is there stays: with no running resolved the
@@ -142,4 +149,8 @@ pkg_postinst() {
 		elog
 		elog "root no longer logs in at the boot: greetd asks for the user."
 	fi
+}
+
+pkg_postrm() {
+	udev_reload
 }
