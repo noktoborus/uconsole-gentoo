@@ -48,7 +48,6 @@ RDEPEND="
 	gui-apps/swayidle
 	gui-apps/swaylock
 	gui-apps/foot
-	gui-apps/swaync
 	x11-misc/rofi
 	gui-apps/grim
 	gui-apps/slurp
@@ -72,7 +71,6 @@ RDEPEND="
 	net-wireless/blueman
 	media-video/pipewire
 	media-video/wireplumber
-	media-sound/pwvucontrol
 	media-libs/alsa-ucm-conf
 	gui-libs/greetd
 	gui-apps/gtkgreet
