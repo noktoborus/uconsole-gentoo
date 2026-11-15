@@ -117,13 +117,19 @@ it was taken; with `no` it outlives the logout.
 
 `drowse-status --waybar --follow` writes one line of JSON at each change,
 and as the time left runs; waybar needs no `interval`. A click takes or
-lets go the inhibitor of `drowse-inhibit`.
+lets go the inhibitor of `drowse-inhibit`. The module shows the icon
+only, in the middle of a width that does not change; the time left and
+what holds the system are in the tooltip. For the time on the bar too,
+take `"format": "{icon} {text}"` and a width of 12.
 
 ```json
 "custom/drowse": {
     "exec": "drowse-status --waybar --follow",
     "return-type": "json",
-    "format": "{icon} {text}",
+    "format": "{icon}",
+    "min-length": 3,
+    "max-length": 3,
+    "align": 0.5,
     "format-icons": {
         "unknown": "?",
         "announced": "⏰",
