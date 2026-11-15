@@ -1,0 +1,11 @@
+#!/bin/bash
+# Run by udev, as root, on a hotplug of DRM. For each user whose service
+# manager runs, start the user unit raspberry-pi-wireplumber-hdmi.service
+# in it. --no-block: udev waits for nothing; the work runs in the manager
+# of the user, out of the sandbox of udevd.
+for d in /run/user/*/systemd/private; do
+	user=$(stat -c %U "${d%/systemd/private}") || continue
+	systemctl --user --machine="${user}@" --no-block \
+		start raspberry-pi-wireplumber-hdmi.service
+done
+exit 0

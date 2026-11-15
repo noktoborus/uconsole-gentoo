@@ -1,0 +1,154 @@
+#!/usr/bin/env python3
+"""WirePlumber probes again the vc4hdmi cards whose HDMI profiles do not
+fit the display that is in.
+
+Run by the user unit raspberry-pi-wireplumber-hdmi.service, as the user.
+
+WirePlumber probes the profiles of a card once, when it adds the card.
+vc4-hdmi opens no PCM with no HDMI display in, and limits the channels
+by the ELD of the display. So the profiles fit the display that was in
+at the probe: none with no display, stereo only for a display of two
+channels. This asks WirePlumber by D-Bus (org.freedesktop.ReserveDevice1)
+to give up a card and take it again at once, so it probes it again, when
+the display in now is not the one of the profiles:
+
+- a display with sound and no HDMI profile: probe;
+- a display with no sound (an empty ELD) and an HDMI profile: probe, so
+  the profile goes;
+- a display with sound and an HDMI profile: probe if its ELD is not the
+  one kept at the last probe made here, or none is kept.
+
+The ELD of the last probe is kept in $XDG_RUNTIME_DIR, so it goes at the
+logout. A card with no display is left alone: it keeps its profile for
+the next plug. Where WirePlumber does not hold the card, the name has no
+owner and nothing is done.
+
+notes/hdmi-audio-hotplug.md of the uconsole linux repository.
+"""
+
+import glob
+import json
+import os
+import subprocess
+
+STATE = os.path.join(
+    os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}",
+    "raspberry-pi-wireplumber-hdmi")
+
+
+def vc4hdmi_cards():
+    """(number, id) of each vc4hdmi card."""
+    for path in sorted(glob.glob("/sys/class/sound/card*/id")):
+        with open(path) as f:
+            card_id = f.read().strip()
+        if card_id.startswith("vc4hdmi"):
+            number = int(os.path.basename(os.path.dirname(path))[len("card"):])
+            yield number, card_id
+
+
+def amixer_cget(number, control):
+    """The values of a control of the card, as text, or None."""
+    r = subprocess.run(["amixer", "-c", str(number), "cget", control],
+                       capture_output=True, text=True)
+    for line in r.stdout.splitlines():
+        line = line.strip()
+        if line.startswith(": values="):
+            return line[len(": values="):]
+    return None
+
+
+def jack_on(number):
+    """True if "HDMI Jack" of the card is on: a display is in."""
+    return amixer_cget(number, "iface=CARD,name=HDMI Jack") == "on"
+
+
+def read_eld(number):
+    """The ELD of the card, b"" if the display has no sound."""
+    values = amixer_cget(number, "iface=PCM,name=ELD")
+    if not values:
+        return b""
+    return bytes(int(x, 16) for x in values.split(",")).rstrip(b"\0")
+
+
+def eld_name(eld):
+    """The name of the display in the ELD."""
+    length = eld[4] & 0x1f if len(eld) > 4 else 0
+    return eld[20:20 + length].decode("ascii", "replace") or "?"
+
+
+def cards_with_hdmi_profile():
+    """The numbers of the ALSA cards whose device in PipeWire has an HDMI
+    profile."""
+    r = subprocess.run(["pw-dump"], capture_output=True, text=True)
+    try:
+        objects = json.loads(r.stdout or "[]")
+    except ValueError:
+        return set()
+    cards = set()
+    for o in objects:
+        if o.get("type") != "PipeWire:Interface:Device":
+            continue
+        info = o.get("info") or {}
+        number = (info.get("props") or {}).get("api.alsa.card")
+        profiles = (info.get("params") or {}).get("EnumProfile") or []
+        if any(p.get("name", "").startswith("output:hdmi") for p in profiles):
+            cards.add(str(number))
+    return cards
+
+
+def kept_eld(number):
+    """The ELD kept at the last probe made here, or None."""
+    try:
+        with open(os.path.join(STATE, f"card{number}")) as f:
+            return bytes.fromhex(f.read().strip())
+    except (OSError, ValueError):
+        return None
+
+
+def keep_eld(number, eld):
+    os.makedirs(STATE, exist_ok=True)
+    with open(os.path.join(STATE, f"card{number}"), "w") as f:
+        f.write(eld.hex())
+
+
+def request_release(number):
+    """Ask WirePlumber to give up the card and take it again."""
+    name = f"org.freedesktop.ReserveDevice1.Audio{number}"
+    path = f"/org/freedesktop/ReserveDevice1/Audio{number}"
+    r = subprocess.run(
+        ["busctl", "--user", "call", name, path,
+         "org.freedesktop.ReserveDevice1", "RequestRelease", "i", "0"],
+        capture_output=True, text=True)
+    return r.returncode == 0, (r.stdout + r.stderr).strip()
+
+
+def main():
+    with_profile = None
+    for number, card_id in vc4hdmi_cards():
+        card = f"card {number} ({card_id})"
+        if not jack_on(number):
+            print(f"{card}: no display")
+            continue
+        eld = read_eld(number)
+        display = eld_name(eld) if eld else "a display with no sound"
+        if with_profile is None:
+            with_profile = cards_with_hdmi_profile()
+        has = str(number) in with_profile
+        if not eld:
+            probe = has
+        elif not has:
+            probe = True
+        else:
+            probe = kept_eld(number) != eld
+        if not probe:
+            print(f"{card}: {display}: the profiles fit")
+            continue
+        ok, reply = request_release(number)
+        print(f"{card}: {display}: "
+              f"{'made again' if ok else 'not held'}: {reply}")
+        if ok:
+            keep_eld(number, eld)
+
+
+if __name__ == "__main__":
+    main()

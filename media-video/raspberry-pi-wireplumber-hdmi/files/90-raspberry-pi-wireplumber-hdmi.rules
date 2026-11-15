@@ -1,0 +1,3 @@
+# A display plugged into or out of HDMI: each user's WirePlumber probes
+# its vc4hdmi cards again (/usr/libexec/raspberry-pi-wireplumber-hdmi-udev).
+ACTION=="change", SUBSYSTEM=="drm", ENV{HOTPLUG}=="1", RUN+="/usr/libexec/raspberry-pi-wireplumber-hdmi-udev"

@@ -1,0 +1,11 @@
+# /usr/lib/systemd/user/raspberry-pi-wireplumber-hdmi.service: WirePlumber
+# probes its vc4hdmi cards again. Started by
+# /usr/libexec/raspberry-pi-wireplumber-hdmi-udev on a hotplug of DRM, or
+# by hand: systemctl --user start raspberry-pi-wireplumber-hdmi.
+[Unit]
+Description=WirePlumber probes the vc4hdmi cards again
+After=wireplumber.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/raspberry-pi-wireplumber-hdmi
