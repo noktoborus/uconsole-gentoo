@@ -5,8 +5,8 @@
 # on a change of /etc/drowse.conf and the start after a sleep are
 # enabled by a preset.
 #
-# The source is a copy of drowse in files/drowse, made by package.sh of
-# drowse with the sum below; CRATES is Cargo.lock, written by it too.
+# The source is a copy of drowse in files/drowse, with the sum below;
+# CRATES is its Cargo.lock.
 
 EAPI=8
 
@@ -152,7 +152,7 @@ RDEPEND="
 "
 BDEPEND="virtual/pkgconfig"
 
-# files/ sha256 (drowse/package.sh): 144862d97590b4d94b1b270d5a28cbffce79b4154ad7d25ed5b9862e395e13e5
+# files/ sha256: 144862d97590b4d94b1b270d5a28cbffce79b4154ad7d25ed5b9862e395e13e5
 
 src_unpack() {
 	cargo_src_unpack
