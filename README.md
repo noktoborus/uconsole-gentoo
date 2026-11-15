@@ -7,6 +7,7 @@ lacks. On the uConsole it is `/var/db/repos/uconsole`.
 |---|---|
 | `sys-kernel/uconsole-pi-kernel` | the kernels of the CM5 and the CM4 (USE `cm5`, `cm4`, `16k`) in `/boot`, their modules |
 | `virtual/dist-kernel` | the packages of modules build again with each kernel |
+| `virtual/linux-sources` | nothing: it points to `sys-kernel/uconsole-pi-kernel`, so a package of a module does not pull `gentoo-sources` |
 | `sys-boot/uconsole-pi-firmware` | `/boot/config.txt`, `/boot/cmdline.txt`, the firmware of the CM4 |
 | `gui-wm/uconsole-pi-desktop` | sway, greetd, the keyring and the agent of SSH, Flathub, DNS by resolved, mDNS by avahi, the presets of the services; its dependencies are the desktop |
 | `dev-util/sccache-portage-sandbox` | the directories and the sandbox rule of sccache |
