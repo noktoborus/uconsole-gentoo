@@ -1,0 +1,3 @@
+enable drowsed.service
+enable drowsed-config.path
+enable drowsed-resume.service

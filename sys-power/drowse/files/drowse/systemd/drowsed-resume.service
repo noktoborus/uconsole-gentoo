@@ -1,0 +1,10 @@
+[Unit]
+Description=drowse: start the service again after a sleep
+After=suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
+
+[Service]
+Type=oneshot
+ExecStart=systemctl --no-block start drowsed.service
+
+[Install]
+WantedBy=suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target

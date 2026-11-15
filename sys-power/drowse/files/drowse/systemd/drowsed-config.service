@@ -1,0 +1,6 @@
+[Unit]
+Description=drowse: restart the service on a change of its settings
+
+[Service]
+Type=oneshot
+ExecStart=systemctl try-restart drowsed.service

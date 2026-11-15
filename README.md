@@ -10,6 +10,7 @@ lacks. On the uConsole it is `/var/db/repos/uconsole`.
 | `sys-boot/uconsole-pi-firmware` | `/boot/config.txt`, `/boot/cmdline.txt`, the firmware of the CM4 |
 | `gui-wm/uconsole-pi-desktop` | sway, greetd, the keyring and the agent of SSH, Flathub, DNS by resolved, mDNS by avahi, the presets of the services; its dependencies are the desktop |
 | `dev-util/sccache-portage-sandbox` | the directories and the sandbox rule of sccache |
+| `sys-power/drowse` | `drowsed` (while every session of logind is idle, the actions of its stages: a command and its undo, an action of power; its state on the system bus), `drowse-inhibit`, `drowse-status` (also for waybar), the units, the preset, the policy of D-Bus; not yet tried on the device; its source is drowse |
 
 ## Set up the uConsole from the base image
 

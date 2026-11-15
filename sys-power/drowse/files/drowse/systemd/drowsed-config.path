@@ -1,0 +1,8 @@
+[Unit]
+Description=drowse: restart the service on a change of its settings
+
+[Path]
+PathChanged=/etc/drowse.conf
+
+[Install]
+WantedBy=multi-user.target

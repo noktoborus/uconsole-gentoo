@@ -1,0 +1,17 @@
+[Unit]
+Description=drowse: the stages of actions while the system is idle
+Wants=systemd-logind.service upower.service
+After=systemd-logind.service upower.service
+PartOf=systemd-logind.service
+Conflicts=sleep.target
+Before=sleep.target
+
+[Service]
+Type=dbus
+BusName=io.github.noktoborus.Drowse
+ExecStart=/usr/bin/drowsed
+Restart=on-failure
+TimeoutStopSec=10s
+
+[Install]
+WantedBy=multi-user.target
