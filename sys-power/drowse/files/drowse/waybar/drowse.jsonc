@@ -1,0 +1,28 @@
+// The module of drowse for waybar. In the config of waybar:
+//   "include": ["/etc/xdg/waybar/drowse.jsonc"],
+//   "modules-right": ["custom/drowse", ...],
+// and in its style.css:
+//   @import "/etc/xdg/waybar/drowse.css";
+// The icon only, in the middle of a width that does not change; the
+// time left and what holds the system up are in the tooltip. A click
+// takes or lets go the inhibitor of drowse-inhibit.
+{
+    "custom/drowse": {
+        "exec": "drowse-status --waybar --follow",
+        "return-type": "json",
+        "format": "{icon}",
+        "min-length": 3,
+        "max-length": 3,
+        "align": 0.5,
+        "format-icons": {
+            "unknown": "?",
+            "announced": "⏰",
+            "own": "☕",
+            "other": "🔒",
+            "session-other": "👤",
+            "idle": "🌙",
+            "active": ""
+        },
+        "on-click": "drowse-inhibit toggle"
+    }
+}

@@ -1,12 +1,15 @@
 # drowse: while every session of logind is idle, drowsed does the actions
 # of its stages (a command and its undo, an action of power); its state
 # is on the system bus. drowse-inhibit holds the system by hand,
-# drowse-status shows the state, for waybar too. The service, the restart
+# drowse-status shows the state, for waybar too: /etc/xdg/waybar has its
+# module. /etc/drowse.conf has the settings. The service, the restart
 # on a change of /etc/drowse.conf and the start after a sleep are
 # enabled by a preset.
 #
 # The source is a copy of drowse in files/drowse, with the sum below;
-# CRATES is its Cargo.lock.
+# CRATES is its Cargo.lock. The modes of files/ are not kept.
+# /etc/drowse.conf has every key with its default in comments; /etc is
+# in CONFIG_PROTECT, so a change made on the device is kept on an update.
 
 EAPI=8
 
@@ -152,11 +155,10 @@ RDEPEND="
 "
 BDEPEND="virtual/pkgconfig"
 
-# files/ sha256: f3a6b61d3f7c272db0e00e0fdb5eea4b386c44aad16315077f6b33f76f480d1f
+# files/ sha256: ca395032674c69b58570853d5679901edacc96284ed415e1d1e8f4710babb5cc
 
 src_unpack() {
 	cargo_src_unpack
-	# the modes of files/ are not kept, as in sys-power/axp22x-soft-battery
 	cp -r --no-preserve=mode "${FILESDIR}"/drowse/. "${S}" || die
 }
 
@@ -169,5 +171,9 @@ src_install() {
 	doins preset/50-drowse.preset
 	insinto /usr/share/dbus-1/system.d
 	doins dbus/io.github.noktoborus.Drowse.conf
+	insinto /etc
+	doins etc/drowse.conf
+	insinto /etc/xdg/waybar
+	doins waybar/drowse.jsonc waybar/drowse.css
 	dodoc README.md
 }

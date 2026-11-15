@@ -200,3 +200,10 @@ fn sections_that_are_not_of_a_stage() {
         assert!(stage_of_section(name).is_none(), "{name}");
     }
 }
+
+#[test]
+fn the_file_of_the_package_is_the_defaults() {
+    let (settings, warnings) = parse(include_str!("../../etc/drowse.conf"));
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert_eq!(settings, Settings::default());
+}

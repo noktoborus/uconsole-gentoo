@@ -122,6 +122,22 @@ only, in the middle of a width that does not change; the time left and
 what holds the system are in the tooltip. For the time on the bar too,
 take `"format": "{icon} {text}"` and a width of 12.
 
+The package puts the module in `/etc/xdg/waybar/drowse.jsonc` and its
+colours in `/etc/xdg/waybar/drowse.css`. In the config of waybar:
+
+```jsonc
+"include": ["/etc/xdg/waybar/drowse.jsonc"],
+"modules-right": ["custom/drowse", "clock"],
+```
+
+and in its `style.css`:
+
+```css
+@import "/etc/xdg/waybar/drowse.css";
+```
+
+The module, as the file has it:
+
 ```json
 "custom/drowse": {
     "exec": "drowse-status --waybar --follow",
