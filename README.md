@@ -10,6 +10,8 @@ lacks. On the uConsole it is `/var/db/repos/uconsole`.
 | `sys-boot/uconsole-pi-firmware` | `/boot/config.txt`, `/boot/cmdline.txt`, the firmware of the CM4 |
 | `gui-wm/uconsole-pi-desktop` | sway, greetd, the keyring and the agent of SSH, Flathub, DNS by resolved, mDNS by avahi, the presets of the services; its dependencies are the desktop |
 | `dev-util/sccache-portage-sandbox` | the directories and the sandbox rule of sccache |
+| `sys-power/axp22x-soft-battery` | the module `axp22x_soft_battery` (the battery by a model of the device tree), `/etc/modprobe.d/axp22x-soft-battery.conf` (blacklist of `axp20x_battery`), `/boot/overlays/axp22x-soft-battery.dtbo`; not yet tried on the device; its source is axp22x-soft-battery |
+| `sys-power/axp22x-soft-battery-daemon` | `/usr/bin/axp22x-soft-battery` (the learning of the cells, `gen-dts`, `import`), its service and preset; not yet tried on the device |
 | `sys-power/drowse` | `drowsed` (while every session of logind is idle, the actions of its stages: a command and its undo, an action of power; its state on the system bus), `drowse-inhibit`, `drowse-status` (also for waybar), the units, the preset, the policy of D-Bus; not yet tried on the device; its source is drowse |
 | `media-video/raspberry-pi-wireplumber-hdmi` | the rule of udev `90-raspberry-pi-wireplumber-hdmi.rules`: on a hotplug of DRM, `/usr/libexec/raspberry-pi-wireplumber-hdmi-udev` starts the oneshot user unit `raspberry-pi-wireplumber-hdmi.service` in the manager of each user; it asks WirePlumber (`ReserveDevice1`) to make again each `vc4hdmi` card whose profiles do not fit the display in (no HDMI profile, or another ELD), so the HDMI output comes (`notes/hdmi-audio-hotplug.md`); tried on the CM5 |
 

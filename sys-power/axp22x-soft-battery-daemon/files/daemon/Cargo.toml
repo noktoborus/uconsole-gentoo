@@ -1,0 +1,14 @@
+[package]
+name = "axp22x-soft-battery"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-2.0-only"
+description = "Learns the cells of the uConsole from the battery of axp22x_soft_battery"
+publish = false
+
+[dependencies]
+lexopt = "0.3"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
