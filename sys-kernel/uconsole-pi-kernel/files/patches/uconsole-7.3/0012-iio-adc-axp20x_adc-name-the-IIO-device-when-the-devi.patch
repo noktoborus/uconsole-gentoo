@@ -1,0 +1,40 @@
+From f04e37713d31bc95caadfe6005a214cc6415b702 Mon Sep 17 00:00:00 2001
+From: Noktoborus <noktoborus@gmail.com>
+Date: Sun, 8 Nov 2026 16:00:05 +0000
+Subject: [PATCH] iio: adc: axp20x_adc: name the IIO device when the device
+ tree matched it
+
+axp20x_probe() took the name of the IIO device from
+platform_get_device_id(pdev). That is set only when the platform id
+table matched the device. When the device tree matched it (a node with
+compatible "x-powers,axp221-adc", as in the overlays of the uConsole),
+it is NULL, the name is NULL, and the IIO device has no file "name": a
+tool that looks for "axp22x-adc" does not find it.
+
+The driver is a cell of the AXP MFD only, and the MFD names its platform
+device by the cell: "axp22x-adc", the same name the id table matches.
+Take that name in both cases.
+---
+ drivers/iio/adc/axp20x_adc.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/iio/adc/axp20x_adc.c b/drivers/iio/adc/axp20x_adc.c
+index d9016fe1aca..066ec4722ab 100644
+--- a/drivers/iio/adc/axp20x_adc.c
++++ b/drivers/iio/adc/axp20x_adc.c
+@@ -1118,7 +1118,11 @@ static int axp20x_probe(struct platform_device *pdev)
+ 		info->data = device_get_match_data(dev);
+ 	}
+ 
+-	indio_dev->name = platform_get_device_id(pdev)->name;
++	/*
++	 * The name of the MFD cell: platform_get_device_id() is NULL when the
++	 * device tree matched the device, and the IIO device had no name.
++	 */
++	indio_dev->name = pdev->name;
+ 	indio_dev->info = info->data->iio_info;
+ 	indio_dev->num_channels = info->data->num_channels;
+ 	indio_dev->channels = info->data->channels;
+-- 
+2.39.5
+

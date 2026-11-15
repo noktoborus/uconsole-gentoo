@@ -17,7 +17,7 @@ inherit mount-boot toolchain-funcs
 DESCRIPTION="Kernel of the ClockworkPi uConsole: Raspberry Pi rpi-7.3.y and its patches"
 HOMEPAGE="https://github.com/raspberrypi/linux"
 
-UCONSOLE_BASE=6634f17dc1348df5d3c98023c24ad9891318a600
+UCONSOLE_BASE=e4d5c8fdad5e5a5bffe85bb1a755feb1a65eed1b
 SRC_URI="https://github.com/raspberrypi/linux/archive/${UCONSOLE_BASE}.tar.gz -> raspberrypi-linux-${UCONSOLE_BASE}.tar.gz"
 S=${WORKDIR}/linux-${UCONSOLE_BASE}
 
@@ -42,7 +42,7 @@ BDEPEND="
 # EEPROM
 RDEPEND="sys-boot/uconsole-pi-firmware[cm4?,cm5?]"
 
-# files/ sha256 (kernel/bump.sh): e1323d5885800c72459d642a884a7c800b2c84554b18bd03465db21314f05300
+# files/ sha256 (kernel/bump.sh): bb5b86e47bc385c3c6623456877cf4d753ecf3ced7503650282e934a3584d07d
 
 # The kernels to build, one line each: <platform>, its defconfig, the name
 # of its kernel file (the name the firmware looks for: kernel_2712.img on
@@ -140,4 +140,8 @@ src_install() {
 		# is there: modules of packages are built for that kernel only.
 		dosym "linux-${kv}" /usr/src/linux
 	done
+
+	# /dev/ntsync has no alias: systemd loads the module at boot
+	insinto /usr/lib/modules-load.d
+	newins "${FILESDIR}"/modules-load-ntsync.conf ntsync.conf
 }

@@ -1,0 +1,42 @@
+From e0bce307dee779eb9fb10ff7257919e34c753864 Mon Sep 17 00:00:00 2001
+From: Noktoborus <noktoborus@gmail.com>
+Date: Sun, 8 Nov 2026 10:17:41 +0000
+Subject: [PATCH] overlays: clockworkpi-uconsole-cm5: the ADC of the AXP228 in
+ hwmon
+
+The ADC of the AXP228 is an IIO device only; hwmon has the battery by
+power_supply, with no temperature of the PMIC, no TS voltage and one
+current. A node iio-hwmon takes the five channels of the ADC: the
+temperature of the PMIC, the battery voltage, the charge and the
+discharge currents, the TS voltage. It is in this overlay, not in one of
+its own: the overlay exports no axp_adc, so the firmware cannot resolve
+the label from another overlay. hwmon names the device axp_hwmon, by the
+node.
+---
+ .../dts/overlays/clockworkpi-uconsole-cm5-overlay.dts  | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/arch/arm/boot/dts/overlays/clockworkpi-uconsole-cm5-overlay.dts b/arch/arm/boot/dts/overlays/clockworkpi-uconsole-cm5-overlay.dts
+index 70de6810aa8..3458c157a63 100644
+--- a/arch/arm/boot/dts/overlays/clockworkpi-uconsole-cm5-overlay.dts
++++ b/arch/arm/boot/dts/overlays/clockworkpi-uconsole-cm5-overlay.dts
+@@ -129,6 +129,16 @@
+ 				energy-full-design-microwatt-hours = <24790000>;
+ 				charge-full-design-microamp-hours = <6700000>;
+ 			};
++
++			/* the ADC of the AXP228 in hwmon: pmic_temp, batt_v,
++			 * batt_chrg_i, batt_dischrg_i, ts_v, in the order of
++			 * axp22x_adc_channels[] of axp20x_adc.c
++			 */
++			axp_hwmon: axp-hwmon {
++				compatible = "iio-hwmon";
++				io-channels = <&axp_adc 0>, <&axp_adc 1>, <&axp_adc 2>,
++					      <&axp_adc 3>, <&axp_adc 4>;
++			};
+ 		};
+ 	};
+ 	fragment@2 {
+-- 
+2.39.5
+
