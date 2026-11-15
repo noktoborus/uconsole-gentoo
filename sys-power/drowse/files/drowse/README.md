@@ -123,7 +123,7 @@ lets go the inhibitor of `drowse-inhibit`.
 "custom/drowse": {
     "exec": "drowse-status --waybar --follow",
     "return-type": "json",
-    "format": "{icon} {}",
+    "format": "{icon} {text}",
     "format-icons": {
         "unknown": "?",
         "announced": "⏰",
