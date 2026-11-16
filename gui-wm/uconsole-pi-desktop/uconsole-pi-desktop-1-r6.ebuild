@@ -87,7 +87,7 @@ src_install() {
 	newins "${FILESDIR}"/sway-output.conf 40-uconsole-output.conf
 	newins "${FILESDIR}"/sway-uconsole.conf 50-uconsole.conf
 	systemd_douserunit "${FILESDIR}"/sway-session.target
-	dobin "${FILESDIR}"/backlight "${FILESDIR}"/uconsole-screen-toggle
+	dobin "${FILESDIR}"/backlight
 
 	insinto /etc/greetd
 	newins "${FILESDIR}"/greetd-uconsole.toml uconsole.toml
