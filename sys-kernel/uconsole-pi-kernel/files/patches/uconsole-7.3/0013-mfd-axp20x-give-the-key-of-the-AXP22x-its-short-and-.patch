@@ -1,0 +1,33 @@
+From c62ee0e50de7ae0f32ed580b31a4eb59e3d8aaab Mon Sep 17 00:00:00 2001
+From: Noktoborus <noktoborus@gmail.com>
+Date: Mon, 16 Nov 2026 17:44:19 +0000
+Subject: [PATCH 13/16] mfd: axp20x: give the key of the AXP22x its short and
+ long press interrupts
+
+The AXP22x tells a short press and a long press of its key (PEK) apart
+by itself: IRQ18 and IRQ19, enabled by REG 42H bits 1 and 0 (AXP228
+datasheet, 9.1 and REG 42H). The cell of the key had only the edges of
+the key. Name the two interrupts in its resources, PEK_SHORT and
+PEK_LONG, so the driver of the key can take them.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/mfd/axp20x.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/drivers/mfd/axp20x.c b/drivers/mfd/axp20x.c
+index f46c2b1e184..3f3b1d6fb1f 100644
+--- a/drivers/mfd/axp20x.c
++++ b/drivers/mfd/axp20x.c
+@@ -347,6 +347,8 @@ static const struct resource axp803_usb_power_supply_resources[] = {
+ static const struct resource axp22x_pek_resources[] = {
+ 	DEFINE_RES_IRQ_NAMED(AXP22X_IRQ_PEK_RIS_EDGE, "PEK_DBR"),
+ 	DEFINE_RES_IRQ_NAMED(AXP22X_IRQ_PEK_FAL_EDGE, "PEK_DBF"),
++	DEFINE_RES_IRQ_NAMED(AXP22X_IRQ_PEK_SHORT, "PEK_SHORT"),
++	DEFINE_RES_IRQ_NAMED(AXP22X_IRQ_PEK_LONG, "PEK_LONG"),
+ };
+ 
+ static const struct resource axp288_power_button_resources[] = {
+-- 
+2.39.5
+

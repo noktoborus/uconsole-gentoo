@@ -1,0 +1,69 @@
+From 77b537a70a7d1f6090ff9ffa7f3d454e6597ea11 Mon Sep 17 00:00:00 2001
+From: Noktoborus <noktoborus@gmail.com>
+Date: Mon, 16 Nov 2026 17:51:38 +0000
+Subject: [PATCH 15/16] dt-bindings: mfd: x-powers,axp152: the press kinds and
+ the power off time of the PEK
+
+Describe what axp20x-pek reads from the node of an AXP22x:
+x-powers,pek-power-off-ms, and the child nodes pek-short-press and
+pek-long-press with linux,input-type and linux,code of input.yaml.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ .../bindings/mfd/x-powers,axp152.yaml         | 40 +++++++++++++++++++
+ 1 file changed, 40 insertions(+)
+
+diff --git a/Documentation/devicetree/bindings/mfd/x-powers,axp152.yaml b/Documentation/devicetree/bindings/mfd/x-powers,axp152.yaml
+index 45f015d63df..839e0ebbfc1 100644
+--- a/Documentation/devicetree/bindings/mfd/x-powers,axp152.yaml
++++ b/Documentation/devicetree/bindings/mfd/x-powers,axp152.yaml
+@@ -152,6 +152,46 @@ properties:
+     description: >
+       Set this when the PMIC is wired for master mode through the MODESET pin.
+ 
++  x-powers,pek-power-off-ms:
++    description: >
++      The time the power key (PEK) is held down before the PMIC cuts the
++      power by itself; 0 turns this off. AXP22x only.
++    enum: [0, 4000, 6000, 8000, 10000]
++
++  pek-short-press:
++    $ref: /schemas/input/input.yaml#
++    type: object
++    unevaluatedProperties: false
++    description: >
++      The event of a short press of the power key (PEK). With this node or
++      pek-long-press, the key sends their events only, not KEY_POWER on its
++      edges. A key goes down and up; a switch turns over. AXP22x only.
++    properties:
++      linux,input-type:
++        enum: [1, 5]   # EV_KEY (the default), EV_SW
++        default: 1
++      linux,code: true
++    required:
++      - linux,code
++
++  pek-long-press:
++    $ref: /schemas/input/input.yaml#
++    type: object
++    unevaluatedProperties: false
++    description: >
++      The event of a long press of the power key (PEK), as pek-short-press.
++      AXP22x only.
++    properties:
++      linux,input-type:
++        enum: [1, 5]   # EV_KEY (the default), EV_SW
++        default: 1
++      linux,code: true
++      x-powers,time-ms:
++        description: The time of a long press.
++        enum: [1000, 1500, 2000, 2500]
++    required:
++      - linux,code
++
+   vin1-supply:
+     description: >
+       DCDC1 power supply node, if present.
+-- 
+2.39.5
+

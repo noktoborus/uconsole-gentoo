@@ -1,0 +1,56 @@
+From ef9e75e67966b6cedefc70257c749b07907b00b0 Mon Sep 17 00:00:00 2001
+From: Noktoborus <noktoborus@gmail.com>
+Date: Mon, 16 Nov 2026 17:52:50 +0000
+Subject: [PATCH 16/16] overlays: clockworkpi-uconsole-cm5: the power key as a
+ lid and a power key
+
+A short press of the key of the AXP228 turns the lid over (EV_SW,
+SW_LID): logind, UPower and the switch bindings of sway see a lid. A
+press of 2.5 s is the power key (KEY_POWER); a press of 10 s cuts the
+power, as the udev rule of the image set it before.
+
+The key no longer sends KEY_POWER on a short press: logind takes the
+long press by HandlePowerKey=, and the lid by HandleLidSwitch=.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ .../clockworkpi-uconsole-cm5-overlay.dts         | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+diff --git a/arch/arm/boot/dts/overlays/clockworkpi-uconsole-cm5-overlay.dts b/arch/arm/boot/dts/overlays/clockworkpi-uconsole-cm5-overlay.dts
+index 3458c157a63..5e6fa174ce5 100644
+--- a/arch/arm/boot/dts/overlays/clockworkpi-uconsole-cm5-overlay.dts
++++ b/arch/arm/boot/dts/overlays/clockworkpi-uconsole-cm5-overlay.dts
+@@ -2,6 +2,7 @@
+ /plugin/;
+ 
+ #include <dt-bindings/gpio/gpio.h>
++#include <dt-bindings/input/input.h>
+ #include <dt-bindings/clock/rp1.h>
+ 
+ 
+@@ -29,6 +30,21 @@
+ 				interrupt-parent = <&rp1_gpio>;
+ 				interrupts = <2 8>; /* Adjusted IRQ for RP1 */
+ 				irq-gpios = <&rp1_gpio 2 0>;
++				/*
++				 * The power key: a short press turns the lid
++				 * over, a press of 2.5 s is the power key, a
++				 * press of 10 s cuts the power.
++				 */
++				x-powers,pek-power-off-ms = <10000>;
++				pek-short-press {
++					linux,input-type = <EV_SW>;
++					linux,code = <SW_LID>;
++				};
++				pek-long-press {
++					linux,input-type = <EV_KEY>;
++					linux,code = <KEY_POWER>;
++					x-powers,time-ms = <2500>;
++				};
+ 				regulators {
+ 					x-powers,dcdc-freq = <3000>;
+ 					reg_aldo1: aldo1 {
+-- 
+2.39.5
+
