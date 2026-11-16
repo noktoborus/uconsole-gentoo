@@ -60,11 +60,6 @@ pub enum Warning {
         /// The sections passed over.
         passed_over: Vec<String>,
     },
-    /// A further stage with no `Action` is no stage: the stages end before it.
-    StageWithNoAction {
-        /// The section.
-        section: String,
-    },
     /// `Resume` of a stage whose action is of logind, passed over.
     ResumeOfLogind {
         /// The section.
@@ -121,9 +116,6 @@ impl fmt::Display for Warning {
                 power.section(),
                 passed_over.join(", ")
             ),
-            Self::StageWithNoAction { section } => {
-                write!(f, "[{section}] has no Action; the stages end before it")
-            }
             Self::ResumeOfLogind { section, line } => write!(
                 f,
                 "line {line}: Resume in [{section}] is for a command, not an action of logind; passed over"

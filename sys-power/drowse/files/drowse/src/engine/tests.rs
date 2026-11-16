@@ -52,7 +52,8 @@ fn busy_world(since: u64) -> Snapshot {
 }
 
 /// The times of the tests: one stage a power source, `poweroff`.
-const TIMES: &str = "[IdleBattery]\nIdleTime=15m\n[IdleAC]\nIdleTime=60m\n";
+const TIMES: &str =
+    "[IdleBattery]\nIdleTime=15m\nAction=poweroff\n[IdleAC]\nIdleTime=60m\nAction=poweroff\n";
 
 fn engine(text: &str, power: PowerSource) -> Engine {
     let (settings, warnings) = settings::parse(text);
@@ -172,7 +173,10 @@ fn a_late_announce_runs_in_full() {
 
 #[test]
 fn an_action_waits_for_a_fresh_read() {
-    let mut engine = engine("[IdleAC]\nIdleTime=1m\nCountdown=Never\n", PowerSource::Ac);
+    let mut engine = engine(
+        "[IdleAC]\nIdleTime=1m\nCountdown=Never\nAction=poweroff\n",
+        PowerSource::Ac,
+    );
     engine.on_snapshot(0, idle_world(0));
     let out = engine.on_power(mins(2), PowerSource::Unknown);
     assert!(logind_actions(&out).is_empty());
@@ -283,6 +287,14 @@ fn never_is_idle_with_no_action() {
     assert_eq!(engine.next_due(), None);
 }
 
+/// Ends the `Resume` of a unit at `at`, and gives the entry that waited
+/// for it, on a fresh read of an idle world.
+fn resume_ended(engine: &mut Engine, at: u64, unit: &str) -> Vec<Command> {
+    engine.on_job_ended(at, unit, true);
+    assert_eq!(engine.next_due(), Some((at, Due::Action)));
+    engine.on_snapshot(at, idle_world(0))
+}
+
 #[test]
 fn the_stages_one_after_another() {
     let mut engine = engine(STAGES, PowerSource::Battery);
@@ -291,34 +303,113 @@ fn the_stages_one_after_another() {
     assert_eq!(engine.view().scheduled, ("radio off".to_owned(), mins(5)));
     engine.on_job_ended(secs(1), POWER_SAVE, true);
     let out = engine.on_due(mins(5));
-    assert_eq!(jobs(&out), [Job::Start(RADIO_OFF.to_owned())]);
-    assert_eq!(engine.view().scheduled, ("poweroff".to_owned(), mins(37)));
-    engine.on_job_ended(mins(5) + secs(1), RADIO_OFF, true);
-    engine.on_due(mins(35));
+    assert_eq!(jobs(&out), [Job::Stop(POWER_SAVE.to_owned())]);
     assert_eq!(engine.view().state, State::Announced);
-    let out = engine.on_due(mins(37));
+    assert_eq!(engine.next_due(), None);
+    let out = resume_ended(&mut engine, mins(5) + secs(2), POWER_SAVE);
+    assert_eq!(jobs(&out), [Job::Start(RADIO_OFF.to_owned())]);
+    let entered = mins(5) + secs(2);
+    assert_eq!(
+        engine.view().scheduled,
+        ("poweroff".to_owned(), entered + mins(32))
+    );
+    engine.on_job_ended(entered + secs(1), RADIO_OFF, true);
+    engine.on_due(entered + mins(30));
+    assert_eq!(engine.view().state, State::Announced);
+    let out = engine.on_due(entered + mins(32));
+    assert_eq!(jobs(&out), [Job::Stop(RADIO_OFF.to_owned())]);
+    assert!(logind_actions(&out).is_empty());
+    let out = resume_ended(&mut engine, entered + mins(32) + secs(1), RADIO_OFF);
     assert_eq!(logind_actions(&out), [LogindAction::Poweroff]);
 }
 
 #[test]
-fn activity_runs_the_resume_last_stage_first() {
+fn activity_leaves_the_one_stage_entered() {
     let mut engine = engine(STAGES, PowerSource::Battery);
     engine.on_snapshot(0, idle_world(0));
     engine.on_job_ended(secs(1), POWER_SAVE, true);
     engine.on_due(mins(5));
-    engine.on_job_ended(mins(5) + secs(1), RADIO_OFF, true);
+    resume_ended(&mut engine, mins(5) + secs(1), POWER_SAVE);
+    engine.on_job_ended(mins(5) + secs(2), RADIO_OFF, true);
     let out = engine.on_snapshot(mins(10), busy_world(mins(10)));
-    assert_eq!(
-        jobs(&out),
-        [
-            Job::Stop(RADIO_OFF.to_owned()),
-            Job::Stop(POWER_SAVE.to_owned())
-        ]
-    );
+    assert_eq!(jobs(&out), [Job::Stop(RADIO_OFF.to_owned())]);
     assert!(!engine.settled());
     engine.on_job_ended(mins(10) + secs(1), RADIO_OFF, true);
-    engine.on_job_ended(mins(10) + secs(1), POWER_SAVE, true);
     assert!(engine.settled());
+}
+
+#[test]
+fn activity_while_the_resume_runs_cancels_the_entry() {
+    let mut engine = engine(STAGES, PowerSource::Battery);
+    engine.on_snapshot(0, idle_world(0));
+    engine.on_job_ended(secs(1), POWER_SAVE, true);
+    engine.on_due(mins(5));
+    let out = engine.on_snapshot(mins(5) + secs(1), busy_world(mins(5) + secs(1)));
+    assert!(jobs(&out).is_empty());
+    engine.on_job_ended(mins(5) + secs(2), POWER_SAVE, true);
+    assert_eq!(engine.view().state, State::Active);
+    assert_eq!(engine.next_due(), None);
+    assert!(engine.settled());
+}
+
+#[test]
+fn activity_that_ended_during_the_resume_counts_again() {
+    let mut engine = engine(STAGES, PowerSource::Battery);
+    engine.on_snapshot(0, idle_world(0));
+    engine.on_job_ended(secs(1), POWER_SAVE, true);
+    engine.on_due(mins(5));
+    let back = mins(5) + secs(1);
+    engine.on_job_ended(back, POWER_SAVE, true);
+    let out = engine.on_snapshot(back, idle_world(back));
+    assert!(!jobs(&out).contains(&Job::Start(RADIO_OFF.to_owned())));
+    assert_eq!(jobs(&out), [Job::Start(POWER_SAVE.to_owned())]);
+}
+
+#[test]
+fn a_failed_resume_is_a_warning_and_the_entry_comes() {
+    let mut engine = engine(STAGES, PowerSource::Battery);
+    engine.on_snapshot(0, idle_world(0));
+    engine.on_job_ended(secs(1), POWER_SAVE, true);
+    engine.on_due(mins(5));
+    let out = engine.on_job_ended(mins(5) + secs(5), POWER_SAVE, false);
+    assert!(has_line(&out, Level::Warning, "the Resume failed"));
+    let out = engine.on_snapshot(mins(5) + secs(5), idle_world(0));
+    assert_eq!(jobs(&out), [Job::Start(RADIO_OFF.to_owned())]);
+}
+
+#[test]
+fn a_new_count_waits_for_the_resume() {
+    let mut engine = engine(STAGES, PowerSource::Battery);
+    engine.on_snapshot(0, idle_world(0));
+    engine.on_job_ended(secs(1), POWER_SAVE, true);
+    let out = engine.on_snapshot(mins(1), busy_world(mins(1)));
+    assert_eq!(jobs(&out), [Job::Stop(POWER_SAVE.to_owned())]);
+    let out = engine.on_snapshot(mins(1) + secs(1), idle_world(mins(1) + secs(1)));
+    assert!(jobs(&out).is_empty());
+    let out = resume_ended(&mut engine, mins(1) + secs(2), POWER_SAVE);
+    assert_eq!(jobs(&out), [Job::Start(POWER_SAVE.to_owned())]);
+}
+
+#[test]
+fn a_stage_with_no_action_runs_its_resume_when_left() {
+    let text = "[IdleBattery]\nIdleTime=0\nCountdown=Never\nResume=foo\n[IdleAC]\nIdleTime=Never\n";
+    let mut engine = engine(text, PowerSource::Battery);
+    let out = engine.on_snapshot(0, idle_world(0));
+    assert_eq!(jobs(&out), [Job::Start(POWER_SAVE.to_owned())]);
+    engine.on_job_ended(1, POWER_SAVE, true);
+    let out = engine.on_snapshot(secs(1), busy_world(secs(1)));
+    assert_eq!(jobs(&out), [Job::Stop(POWER_SAVE.to_owned())]);
+}
+
+#[test]
+fn a_stage_with_nothing_is_an_entry_that_does_nothing() {
+    let text = "[IdleBattery]\nIdleTime=0\nCountdown=Never\n[IdleBattery-1]\nIdleTime=1m\nCountdown=Never\nAction=poweroff\n[IdleAC]\nIdleTime=Never\n";
+    let mut engine = engine(text, PowerSource::Battery);
+    let out = engine.on_snapshot(0, idle_world(0));
+    assert!(jobs(&out).is_empty());
+    assert!(has_line(&out, Level::Info, "entered, no action"));
+    let out = engine.on_due(mins(1));
+    assert_eq!(logind_actions(&out), [LogindAction::Poweroff]);
 }
 
 #[test]

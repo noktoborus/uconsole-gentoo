@@ -84,7 +84,12 @@ comes. It needs:
   inside the range of the firmware, and the default lowest of the CM5 is
   1500 MHz.
 
-The default action is `poweroff`: it works on any device. A sleep needs
+A stage has no default action: write `Action=` to have one. One stage
+is entered at a time: before the next stage is entered, the one before
+is left, and its `Resume` runs and is waited for; on activity the stage
+entered is left. An `Action` that fails has no `Resume`.
+
+`poweroff` works on any device. A sleep needs
 the kernel and the system set up for it (`CONFIG_SUSPEND`, a place to
 resume from for `hibernate`); the uConsole with a CM5 has no suspend.
 To sleep, set `Action=suspend` in `/etc/drowse.conf`, in the section of

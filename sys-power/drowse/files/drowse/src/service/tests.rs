@@ -128,7 +128,7 @@ async fn a_stage_powers_off_after_17_minutes() {
         &mut events,
         &publisher,
         &clock,
-        settings::parse("[IdleBattery]\nIdleTime=15m\n").0,
+        settings::parse("[IdleBattery]\nIdleTime=15m\nAction=poweroff\n").0,
         stop,
     )
     .await

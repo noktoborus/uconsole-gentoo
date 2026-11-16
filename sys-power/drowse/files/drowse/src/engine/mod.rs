@@ -109,6 +109,13 @@ enum Phase {
     Counting { stage: usize, base: u64 },
     /// The announce of a stage runs; its action comes at `at`.
     Announced { stage: usize, at: u64 },
+    /// The time of the entry into a stage came at `at`; a job of a unit
+    /// still runs (the `Resume` of the stage before), and the entry waits
+    /// for its end.
+    Waiting { stage: usize, at: u64 },
+    /// The jobs ended; the entry into `stage` comes on a fresh read of
+    /// logind.
+    Ready { stage: usize, at: u64 },
     /// Every stage is done.
     Done,
 }
@@ -205,6 +212,11 @@ impl Engine {
     pub fn on_job_ended(&mut self, now: u64, unit: &str, done: bool) -> Vec<Command> {
         let (jobs, ended) = self.units.job_ended(unit, done, now);
         let mut out: Vec<Command> = jobs.into_iter().map(Command::Job).collect();
+        if let Phase::Waiting { stage, .. } = self.phase
+            && self.units.all_down()
+        {
+            self.phase = Phase::Ready { stage, at: now };
+        }
         match ended {
             Ended::Quiet => {}
             Ended::StartFailed => out.push(warning(format!(
@@ -212,6 +224,9 @@ impl Engine {
             ))),
             Ended::ResumeLate => out.push(warning(format!(
                 "{unit}: the command ended; its Resume runs late"
+            ))),
+            Ended::StopFailed => out.push(warning(format!(
+                "{unit}: the Resume failed or was killed; the next stage comes"
             ))),
         }
         out
@@ -244,8 +259,8 @@ impl Engine {
                 };
                 Some((base.saturating_add(micros(idle)), due))
             }
-            Phase::Announced { at, .. } => Some((at, Due::Action)),
-            Phase::Active | Phase::Done => None,
+            Phase::Announced { at, .. } | Phase::Ready { at, .. } => Some((at, Due::Action)),
+            Phase::Waiting { .. } | Phase::Active | Phase::Done => None,
         }
     }
 
@@ -257,7 +272,9 @@ impl Engine {
                 self.sessions_in_use(),
                 holding(&self.snapshot.inhibitors),
             ),
-            Phase::Announced { .. } => (State::Announced, Vec::new(), Vec::new()),
+            Phase::Announced { .. } | Phase::Waiting { .. } | Phase::Ready { .. } => {
+                (State::Announced, Vec::new(), Vec::new())
+            }
             Phase::Counting { .. } | Phase::Done => (State::Idle, Vec::new(), Vec::new()),
         };
         View {
@@ -287,7 +304,9 @@ impl Engine {
                 let at = base.saturating_add(micros(idle)).saturating_add(countdown);
                 (stage.shown_name().to_owned(), at)
             }
-            Phase::Announced { stage, at } => self
+            Phase::Announced { stage, at }
+            | Phase::Waiting { stage, at }
+            | Phase::Ready { stage, at } => self
                 .stages()
                 .get(stage)
                 .map_or(none, |stage| (stage.shown_name().to_owned(), at)),
@@ -334,6 +353,7 @@ impl Engine {
                 (Phase::Counting { stage, .. }, Due::Announce) => self.announce(stage, now, out),
                 (Phase::Counting { stage, .. }, Due::Action)
                 | (Phase::Announced { stage, .. }, Due::Action) => self.act(stage, now, out),
+                (Phase::Ready { stage, .. }, Due::Action) => self.enter(stage, now, out),
                 _ => return,
             }
         }
@@ -359,17 +379,35 @@ impl Engine {
         };
     }
 
-    /// Does the action of a stage, then counts the next stage from now.
+    /// The time of the entry into a stage came. One stage is entered at a
+    /// time and one job runs at a time: the stage entered before is left
+    /// first (its `Resume`), and the entry waits until no job runs.
     fn act(&mut self, stage: usize, now: u64, out: &mut Vec<Command>) {
+        if self.units.all_down() {
+            self.enter(stage, now, out);
+            return;
+        }
+        out.push(info(format!(
+            "stage {stage}: waits for the Resume of the stage before"
+        )));
+        self.stop_units(now, out);
+        self.phase = Phase::Waiting { stage, at: now };
+    }
+
+    /// Enters a stage: its action, if any; then counts the next stage from
+    /// now. A stage with a command or a `Resume` has a unit: its start runs
+    /// the command, its stop the `Resume`.
+    fn enter(&mut self, stage: usize, now: u64, out: &mut Vec<Command>) {
         let Some(this) = self.stages().get(stage).cloned() else {
             return;
         };
-        match &this.action {
-            Action::Logind(action) => {
+        match (&this.action, &this.resume) {
+            (Some(Action::Logind(action)), _) => {
                 out.push(info(format!("action: {action}")));
                 out.push(Command::Logind(*action));
             }
-            Action::Command(_) => {
+            (None, None) => out.push(info(format!("stage {stage}: entered, no action"))),
+            (Some(Action::Command(_)), _) | (None, Some(_)) => {
                 let unit = unit_name(section(self.power), stage);
                 out.push(info(format!(
                     "stage {stage} ({}): started",

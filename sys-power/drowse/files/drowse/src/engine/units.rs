@@ -59,6 +59,8 @@ pub enum Ended {
     StartFailed,
     /// A stop that waited for the start ran now, late.
     ResumeLate,
+    /// The stop failed or was cut: its `Resume` did not end well.
+    StopFailed,
 }
 
 /// The units of the stages.
@@ -147,7 +149,12 @@ impl Units {
             }
             Known::Stopping => {
                 unit.known = Known::Down;
-                (self.reconcile(name, now), Ended::Quiet)
+                let ended = if done {
+                    Ended::Quiet
+                } else {
+                    Ended::StopFailed
+                };
+                (self.reconcile(name, now), ended)
             }
             Known::Down | Known::Up => (Vec::new(), Ended::Quiet),
         }
@@ -267,6 +274,16 @@ mod tests {
                 Job::Stop(A.to_owned())
             ]
         );
+    }
+
+    #[test]
+    fn a_failed_stop_is_told() {
+        let mut units = Units::default();
+        units.want_up(A, 0);
+        units.job_ended(A, true, 1);
+        units.want_all_down(2);
+        assert_eq!(units.job_ended(A, false, 3), (vec![], Ended::StopFailed));
+        assert!(units.all_down());
     }
 
     #[test]

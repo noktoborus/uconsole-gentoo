@@ -55,9 +55,6 @@ impl Power {
 /// The default time of the announce.
 const DEFAULT_COUNTDOWN: Duration = Duration::from_secs(2 * 60);
 
-/// The default action of the first stage.
-const DEFAULT_ACTION: LogindAction = LogindAction::Poweroff;
-
 /// The keys of a stage.
 const KEYS: [&str; 5] = ["IdleTime", "Countdown", "Action", "ActionHint", "Resume"];
 
@@ -69,8 +66,9 @@ pub struct Stage {
     pub idle_time: Span,
     /// How long the announce runs before the action.
     pub countdown: Span,
-    /// The action.
-    pub action: Action,
+    /// The action, the entry into the stage; none is an entry that does
+    /// nothing.
+    pub action: Option<Action>,
     /// The name of the action to show, if set.
     pub hint: Option<String>,
     /// The command that undoes a command of `action`.
@@ -78,11 +76,13 @@ pub struct Stage {
 }
 
 impl Stage {
-    /// The name of the action to show: `ActionHint`, or `Action` as written.
+    /// The name of the action to show: `ActionHint`, or `Action` as
+    /// written; empty for a stage with neither.
     pub fn shown_name(&self) -> &str {
         self.hint
             .as_deref()
-            .unwrap_or_else(|| self.action.as_written())
+            .or_else(|| self.action.as_ref().map(Action::as_written))
+            .unwrap_or_default()
     }
 
     /// A first stage with only its defaults: `IdleTime=Never`, so with
@@ -91,7 +91,7 @@ impl Stage {
         Self {
             idle_time: Span::Never,
             countdown: Span::Time(DEFAULT_COUNTDOWN),
-            action: Action::Logind(DEFAULT_ACTION),
+            action: None,
             hint: None,
             resume: None,
         }
@@ -280,25 +280,19 @@ fn stage_of_section(name: &str) -> Option<Place> {
 }
 
 /// Builds the stages of a power source: the first, then the next ones by
-/// number while the numbers go one by one and each has an `Action`.
+/// number while the numbers go one by one.
 fn build_stages(
     power: Power,
     raw: &BTreeMap<(Power, u32), RawStage>,
     warnings: &mut Vec<Warning>,
 ) -> Vec<Stage> {
-    let first = raw.get(&(power, 0));
-    let mut stages = vec![build_first(power, first, warnings)];
+    let mut stages = vec![raw.get(&(power, 0)).map_or_else(
+        || Stage::default_for(power),
+        |first| build_stage(power, first, warnings),
+    )];
     let mut number = 1;
     while let Some(next) = raw.get(&(power, number)) {
-        match build_further(power, next, warnings) {
-            Some(stage) => stages.push(stage),
-            None => {
-                warnings.push(Warning::StageWithNoAction {
-                    section: next.section.clone(),
-                });
-                return stages;
-            }
-        }
+        stages.push(build_stage(power, next, warnings));
         number += 1;
     }
     let passed_over: Vec<String> = raw
@@ -315,30 +309,10 @@ fn build_stages(
     stages
 }
 
-/// Builds the first stage: each key not set or wrong takes its default.
-fn build_first(power: Power, raw: Option<&RawStage>, warnings: &mut Vec<Warning>) -> Stage {
+/// Builds a stage: each key not set or wrong takes its default.
+fn build_stage(power: Power, raw: &RawStage, warnings: &mut Vec<Warning>) -> Stage {
     let defaults = Stage::default_for(power);
-    let Some(raw) = raw else {
-        return defaults;
-    };
-    let action = read_key(raw, "Action", Action::parse, warnings).unwrap_or(defaults.action);
-    finish_stage(power, raw, action, warnings)
-}
-
-/// Builds a further stage; none when its `Action` is not set or wrong.
-fn build_further(power: Power, raw: &RawStage, warnings: &mut Vec<Warning>) -> Option<Stage> {
-    let action = read_key(raw, "Action", Action::parse, warnings)?;
-    Some(finish_stage(power, raw, action, warnings))
-}
-
-/// Reads the keys of a stage other than `Action`.
-fn finish_stage(
-    power: Power,
-    raw: &RawStage,
-    action: Action,
-    warnings: &mut Vec<Warning>,
-) -> Stage {
-    let defaults = Stage::default_for(power);
+    let action = read_key(raw, "Action", Action::parse, warnings);
     let idle_time = read_key(raw, "IdleTime", time::parse, warnings).unwrap_or(defaults.idle_time);
     let countdown = read_key(raw, "Countdown", time::parse, warnings).unwrap_or(defaults.countdown);
     let hint = raw
@@ -346,7 +320,7 @@ fn finish_stage(
         .get("ActionHint")
         .map(|written| written.value.clone())
         .filter(|hint| !hint.is_empty());
-    let resume = read_resume(raw, &action, warnings);
+    let resume = read_resume(raw, action.as_ref(), warnings);
     Stage {
         idle_time,
         countdown,
@@ -358,9 +332,13 @@ fn finish_stage(
 
 /// Reads `Resume`: an empty value is none; for an action of logind it is
 /// passed over.
-fn read_resume(raw: &RawStage, action: &Action, warnings: &mut Vec<Warning>) -> Option<Command> {
+fn read_resume(
+    raw: &RawStage,
+    action: Option<&Action>,
+    warnings: &mut Vec<Warning>,
+) -> Option<Command> {
     let written = raw.keys.get("Resume").filter(|w| !w.value.is_empty())?;
-    if let Action::Logind(_) = action {
+    if let Some(Action::Logind(_)) = action {
         warnings.push(Warning::ResumeOfLogind {
             section: raw.section.clone(),
             line: written.line,

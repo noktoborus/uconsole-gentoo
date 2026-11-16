@@ -101,8 +101,9 @@ pub fn command_of(
         .ok_or_else(|| StageError::NoStage(instance.to_owned()))?;
     match part {
         Part::Action => match &stage.action {
-            Action::Command(command) => Ok(Some(command.clone())),
-            Action::Logind(_) => Err(StageError::NotACommand(instance.to_owned())),
+            Some(Action::Command(command)) => Ok(Some(command.clone())),
+            Some(Action::Logind(_)) => Err(StageError::NotACommand(instance.to_owned())),
+            None => Ok(None),
         },
         Part::Resume => Ok(stage.resume.clone()),
     }

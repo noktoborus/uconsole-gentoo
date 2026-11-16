@@ -26,18 +26,19 @@ fn defaults_do_nothing() {
     assert_eq!(battery.len(), 1);
     assert_eq!(battery[0].idle_time, Span::Never);
     assert_eq!(battery[0].countdown, minutes(2));
-    assert_eq!(battery[0].action, Action::Logind(LogindAction::Poweroff));
+    assert_eq!(battery[0].action, None);
     assert_eq!(settings.stages(Power::Ac)[0].idle_time, Span::Never);
 }
 
 #[test]
-fn an_idle_time_alone_powers_off() {
+fn an_idle_time_alone_has_no_action() {
     let (settings, warnings) = parse("[IdleBattery]\nIdleTime=20m\n");
     assert!(warnings.is_empty());
     let first = &settings.stages(Power::Battery)[0];
     assert_eq!(first.idle_time, minutes(20));
     assert_eq!(first.countdown, minutes(2));
-    assert_eq!(first.action, Action::Logind(LogindAction::Poweroff));
+    assert_eq!(first.action, None);
+    assert_eq!(first.shown_name(), "");
 }
 
 #[test]
@@ -73,13 +74,16 @@ IdleTime=Never
     assert_eq!(battery[0].countdown, Span::Never);
     assert_eq!(
         battery[0].action,
-        Action::Command(command("tuned-adm profile powersave"))
+        Some(Action::Command(command("tuned-adm profile powersave")))
     );
     assert_eq!(battery[0].shown_name(), "power save");
     assert_eq!(battery[0].resume, Some(command("tuned-adm auto_profile")));
     assert_eq!(battery[1].idle_time, minutes(5));
     assert_eq!(battery[1].shown_name(), "radio off");
-    assert_eq!(battery[2].action, Action::Logind(LogindAction::Poweroff));
+    assert_eq!(
+        battery[2].action,
+        Some(Action::Logind(LogindAction::Poweroff))
+    );
     assert_eq!(battery[2].shown_name(), "poweroff");
     let ac = settings.stages(Power::Ac);
     assert_eq!(ac.len(), 1);
@@ -106,12 +110,9 @@ fn a_wrong_value_takes_its_default() {
 }
 
 #[test]
-fn a_wrong_action_of_the_first_stage_takes_poweroff() {
+fn a_wrong_action_is_no_action() {
     let (settings, warnings) = parse("[IdleBattery]\nAction=\"not closed\n");
-    assert_eq!(
-        settings.stages(Power::Battery)[0].action,
-        Action::Logind(LogindAction::Poweroff)
-    );
+    assert_eq!(settings.stages(Power::Battery)[0].action, None);
     assert!(matches!(&warnings[0], Warning::WrongValue { key, .. } if key == "Action"));
 }
 
@@ -140,7 +141,7 @@ fn the_first_stage_written_twice() {
     let (settings, warnings) = parse(text);
     let first = &settings.stages(Power::Battery)[0];
     assert_eq!(first.idle_time, minutes(3));
-    assert_eq!(first.action, Action::Logind(LogindAction::Suspend));
+    assert_eq!(first.action, Some(Action::Logind(LogindAction::Suspend)));
     assert_eq!(
         warnings,
         [Warning::FirstStageTwice {
@@ -166,16 +167,14 @@ fn a_gap_ends_the_stages() {
 }
 
 #[test]
-fn a_further_stage_needs_an_action() {
-    let text = "[IdleBattery-1]\nIdleTime=5m\n[IdleBattery-2]\nAction=poweroff\n";
+fn a_stage_needs_no_action() {
+    let text = "[IdleBattery-1]\nIdleTime=5m\nResume=foo\n[IdleBattery-2]\nAction=poweroff\n";
     let (settings, warnings) = parse(text);
-    assert_eq!(settings.stages(Power::Battery).len(), 1);
-    assert_eq!(
-        warnings,
-        [Warning::StageWithNoAction {
-            section: "IdleBattery-1".to_owned()
-        }]
-    );
+    let battery = settings.stages(Power::Battery);
+    assert_eq!(battery.len(), 3);
+    assert_eq!(battery[1].action, None);
+    assert_eq!(battery[1].resume, Some(command("foo")));
+    assert!(warnings.is_empty(), "{warnings:?}");
 }
 
 #[test]
@@ -239,7 +238,9 @@ fn the_file_of_the_package() {
     assert_eq!(battery[0].countdown, Span::Never);
     assert_eq!(
         battery[0].action,
-        Action::Command(command("tuned-adm profile drowse-cm5-powersave"))
+        Some(Action::Command(command(
+            "tuned-adm profile drowse-cm5-powersave"
+        )))
     );
     assert_eq!(battery[0].shown_name(), "power save");
     assert_eq!(
@@ -248,7 +249,10 @@ fn the_file_of_the_package() {
     );
     assert_eq!(battery[1].idle_time, minutes(38));
     assert_eq!(battery[1].countdown, minutes(2));
-    assert_eq!(battery[1].action, Action::Logind(LogindAction::Poweroff));
+    assert_eq!(
+        battery[1].action,
+        Some(Action::Logind(LogindAction::Poweroff))
+    );
     let ac = settings.stages(Power::Ac);
     assert_eq!(ac.len(), 1);
     assert_eq!(ac[0].idle_time, Span::Never);
