@@ -120,7 +120,8 @@ fn idle_with_no_action() {
     let _language = english();
     let shown = show(&observed(Some(service("idle", 0))), 0, &name);
     assert_eq!(shown.text, "");
-    assert_eq!(shown.tooltip, ["Idle", "On battery"]);
+    assert_eq!(shown.alt, "idle");
+    assert_eq!(shown.tooltip, ["Idle, nothing planned", "On battery"]);
     assert_eq!(shown.again_in, None);
 }
 
@@ -158,6 +159,10 @@ fn the_holds() {
     assert_eq!(show(&seen, 0, &name).alt, "own");
     seen.inhibitors = vec![inhibitor("until make", "", 1001)];
     assert_eq!(show(&seen, 0, &name).alt, "other");
+    seen.inhibitors = vec![inhibitor("until emerge -uDN @world", "emerge", 0)];
+    assert_eq!(show(&seen, 0, &name).alt, "own");
+    seen.inhibitors = vec![inhibitor("x", "y", 0)];
+    assert_eq!(show(&seen, 0, &name).alt, "other");
     seen.inhibitors.clear();
     seen.sessions = Some(vec![session("bob", 1001, "tty2", "")]);
     let shown = show(&seen, 0, &name);
@@ -167,7 +172,7 @@ fn the_holds() {
     );
     seen.sessions = Some(vec![session("alice", 1000, "tty1", "")]);
     let shown = show(&seen, 0, &name);
-    assert_eq!((shown.alt, shown.class[1]), ("active", "session-own"));
+    assert_eq!((shown.alt, shown.class[1]), ("session-own", "session-own"));
     seen.sessions = None;
     let shown = show(&seen, 0, &name);
     assert_eq!((shown.alt, shown.class[1]), ("active", "hidden"));
@@ -185,6 +190,10 @@ fn a_long_why_is_cut_and_no_why_is_who() {
     assert_eq!(
         inhibitor_line(&inhibitor("drowse-inhibit", "", 1000), &name),
         "drowse-inhibit by alice"
+    );
+    assert_eq!(
+        inhibitor_line(&inhibitor("until make -j4", "held by hand", 1000), &name),
+        "until make -j4 by alice"
     );
 }
 

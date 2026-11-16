@@ -24,6 +24,9 @@ status.awake_held:
 status.idle:
   en: "Idle"
   ru: "Простаивает"
+status.idle_nothing:
+  en: "Idle, nothing planned"
+  ru: "Простаивает, ничего не запланировано"
 status.planned:
   en: "planned %{action} in %{left}"
   ru: "запланировано: %{action} через %{left}"

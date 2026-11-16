@@ -8,8 +8,11 @@ use std::time::Duration;
 use rust_i18n::t;
 
 use crate::bus::SessionRow;
-use crate::inhibit::is_own;
+use crate::inhibit::{UNTIL, is_own};
 use crate::world::Inhibitor;
+
+/// The uid of root.
+const ROOT: u32 = 0;
 
 /// The longest `why` shown, in characters.
 const WHY_MAX: usize = 40;
@@ -58,19 +61,24 @@ pub struct Shown {
 }
 
 impl Observed {
-    /// Whether an inhibitor of the tool of this user holds: of `on` or of
-    /// a command.
+    /// Whether an inhibitor is one of the tool, of this user or of root
+    /// (`sudo drowse-inhibit -- emerge`): of `on` or of a command.
+    fn is_own_inhibitor(&self, inhibitor: &Inhibitor) -> bool {
+        is_own(&inhibitor.who) && (inhibitor.uid == self.uid || inhibitor.uid == ROOT)
+    }
+
+    /// Whether an inhibitor of the tool of this user or of root holds.
     fn own_held(&self) -> bool {
         self.inhibitors
             .iter()
-            .any(|inhibitor| is_own(&inhibitor.who) && inhibitor.uid == self.uid)
+            .any(|inhibitor| self.is_own_inhibitor(inhibitor))
     }
 
     /// Whether an inhibitor of another holds.
     fn other_held(&self) -> bool {
         self.inhibitors
             .iter()
-            .any(|inhibitor| !is_own(&inhibitor.who) || inhibitor.uid != self.uid)
+            .any(|inhibitor| !self.is_own_inhibitor(inhibitor))
     }
 
     /// The hold: `own`, `other`, `session-other`, `session-own`, `none`,
@@ -115,6 +123,7 @@ pub fn show(observed: &Observed, now: u64, user_of: &dyn Fn(u32) -> String) -> S
         (_, "other") => "other",
         (_, "session-other") => "session-other",
         ("idle", _) => "idle",
+        (_, "session-own") => "session-own",
         _ => "active",
     };
     let power = if service.power == "battery" {
@@ -133,7 +142,8 @@ pub fn show(observed: &Observed, now: u64, user_of: &dyn Fn(u32) -> String) -> S
         ("idle", Some(left)) => {
             vec![t!("status.planned", action = action, left = time_left(left)).into_owned()]
         }
-        ("idle", None) | ("announced", None) => vec![t!("status.idle").into_owned()],
+        ("idle", None) => vec![t!("status.idle_nothing").into_owned()],
+        ("announced", None) => vec![t!("status.idle").into_owned()],
         _ => holders(observed, user_of),
     };
     tooltip.push(power_line(&service.power));
@@ -180,9 +190,11 @@ fn session_line(row: &SessionRow) -> String {
     t!("status.session_other", user = user, kind = kind).into_owned()
 }
 
-/// An inhibitor: `why` by the user; with no `why`, `who`.
+/// An inhibitor: `why` by the user; with no `why`, `who`. One of
+/// `drowse-inhibit -- <command>` shows its `who`, `until <command>`: the
+/// command says more than its `why`.
 fn inhibitor_line(inhibitor: &Inhibitor, user_of: &dyn Fn(u32) -> String) -> String {
-    let why = if inhibitor.why.is_empty() {
+    let why = if inhibitor.why.is_empty() || inhibitor.who.starts_with(UNTIL) {
         &inhibitor.who
     } else {
         &inhibitor.why

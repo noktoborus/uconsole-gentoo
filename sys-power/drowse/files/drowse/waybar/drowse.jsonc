@@ -21,6 +21,7 @@
             "other": "🔒",
             "session-other": "👤",
             "idle": "🌙",
+            "session-own": "🖥",
             "active": ""
         },
         "on-click": "drowse-inhibit toggle"

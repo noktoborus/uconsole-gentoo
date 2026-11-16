@@ -155,7 +155,7 @@ RDEPEND="
 "
 BDEPEND="virtual/pkgconfig"
 
-# files/ sha256: c43991978ca37c8e7ced77346031cb6ebf8786120e47726213b379c51d84caf5
+# files/ sha256: 30ae07c855eb17f8812ee225a9605920bfe5cbd6226cb98f8c6134a2863a0ccb
 
 src_unpack() {
 	cargo_src_unpack
@@ -172,6 +172,10 @@ src_install() {
 	insinto /usr/share/dbus-1/system.d
 	doins dbus/io.github.noktoborus.Drowse.conf
 	insinto /etc
+	doins etc/drowse.conf
+	# The file as the package gives it, to compare with or to take again:
+	# /etc/drowse.conf is changed by the user.
+	insinto /usr/share/drowse
 	doins etc/drowse.conf
 	insinto /etc/xdg/waybar
 	doins waybar/drowse.jsonc waybar/drowse.css
