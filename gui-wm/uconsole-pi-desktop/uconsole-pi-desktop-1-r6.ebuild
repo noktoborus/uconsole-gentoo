@@ -86,6 +86,7 @@ src_install() {
 	insinto /etc/sway/config.d
 	newins "${FILESDIR}"/sway-output.conf 40-uconsole-output.conf
 	newins "${FILESDIR}"/sway-uconsole.conf 50-uconsole.conf
+	newins "${FILESDIR}"/sway-bindings.conf 50-uconsole-bindings.conf
 	systemd_douserunit "${FILESDIR}"/sway-session.target
 	dobin "${FILESDIR}"/backlight
 

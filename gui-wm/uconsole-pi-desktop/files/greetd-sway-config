@@ -4,6 +4,8 @@
 
 # The panel of the uConsole, as in the session (sway-output.conf).
 include /etc/sway/config.d/40-uconsole-output.conf
+# The lid, as in the session (sway-bindings.conf).
+include /etc/sway/config.d/50-uconsole-bindings.conf
 
 exec "gtkgreet -l; swaymsg exit"
 
