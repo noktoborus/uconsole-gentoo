@@ -13,16 +13,6 @@ use crate::settings::{Action, LogindAction, Power, Settings, Span, Stage};
 use crate::world::{Inhibitor, PowerSource, Session, SessionState};
 use units::{Ended, Units};
 
-/// The classes of sessions that count in the idle state, as for logind
-/// (`SESSION_CLASS_CAN_IDLE`).
-const CLASSES_THAT_COUNT: [&str; 5] = [
-    "user",
-    "user-early",
-    "user-light",
-    "user-early-light",
-    "greeter",
-];
-
 /// The kinds of an inhibitor that hold the system up, whatever the action.
 const KINDS_THAT_HOLD: [&str; 3] = ["idle", "sleep", "shutdown"];
 
@@ -416,17 +406,17 @@ impl Engine {
         self.settings.stages(section(self.power))
     }
 
-    /// The sessions that count in the idle state.
-    fn counted(snapshot: &Snapshot) -> impl Iterator<Item = &Session> {
+    /// The sessions that count in the idle state: not `closing`, of a
+    /// class of `Classes=` of `[Sessions]`.
+    fn counted<'a>(&'a self, snapshot: &'a Snapshot) -> impl Iterator<Item = &'a Session> {
         snapshot.sessions.iter().filter(|session| {
-            session.state != SessionState::Closing
-                && CLASSES_THAT_COUNT.contains(&session.class.as_str())
+            session.state != SessionState::Closing && self.settings.counts_class(&session.class)
         })
     }
 
     /// The sessions that count and are in use.
     fn sessions_in_use(&self) -> Vec<Session> {
-        Self::counted(&self.snapshot)
+        self.counted(&self.snapshot)
             .filter(|session| !session.idle)
             .cloned()
             .collect()
@@ -435,22 +425,22 @@ impl Engine {
     /// Whether a session in use is gone from the count since the last
     /// snapshot: it counts as activity.
     fn a_session_in_use_left(&self, next: &Snapshot) -> bool {
-        Self::counted(&self.snapshot)
+        self.counted(&self.snapshot)
             .filter(|session| !session.idle)
-            .any(|session| !Self::counted(next).any(|kept| kept.id == session.id))
+            .any(|session| !self.counted(next).any(|kept| kept.id == session.id))
     }
 
     /// Whether the system is idle: every session that counts is idle and no
     /// inhibitor holds.
     fn is_idle(&self) -> bool {
-        Self::counted(&self.snapshot).all(|session| session.idle)
+        self.counted(&self.snapshot).all(|session| session.idle)
             && holding(&self.snapshot.inhibitors).is_empty()
     }
 
     /// The start of the idle state: the latest start of idle of the
     /// sessions, no sooner than the last activity the service saw.
     fn idle_start(&self) -> u64 {
-        Self::counted(&self.snapshot)
+        self.counted(&self.snapshot)
             .map(|session| session.idle_since)
             .fold(self.activity, u64::max)
     }

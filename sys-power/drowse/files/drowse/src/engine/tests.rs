@@ -51,6 +51,9 @@ fn busy_world(since: u64) -> Snapshot {
     }
 }
 
+/// The times of the tests: one stage a power source, `poweroff`.
+const TIMES: &str = "[IdleBattery]\nIdleTime=15m\n[IdleAC]\nIdleTime=60m\n";
+
 fn engine(text: &str, power: PowerSource) -> Engine {
     let (settings, warnings) = settings::parse(text);
     assert!(warnings.is_empty(), "{warnings:?}");
@@ -109,8 +112,8 @@ const POWER_SAVE: &str = "drowsed-stage@battery-0.service";
 const RADIO_OFF: &str = "drowsed-stage@battery-1.service";
 
 #[test]
-fn the_defaults_announce_then_power_off() {
-    let mut engine = engine("", PowerSource::Battery);
+fn an_announce_then_power_off() {
+    let mut engine = engine(TIMES, PowerSource::Battery);
     engine.on_snapshot(0, idle_world(0));
     assert_eq!(engine.view().state, State::Idle);
     assert_eq!(engine.view().scheduled, ("poweroff".to_owned(), mins(17)));
@@ -129,7 +132,7 @@ fn the_defaults_announce_then_power_off() {
 #[test]
 fn the_count_starts_no_sooner_than_the_start() {
     let mut engine = Engine::new(
-        settings::Settings::default(),
+        settings::parse(TIMES).0,
         PowerSource::Battery,
         mins(100),
         Vec::new(),
@@ -141,7 +144,7 @@ fn the_count_starts_no_sooner_than_the_start() {
 
 #[test]
 fn activity_cancels_the_announce() {
-    let mut engine = engine("", PowerSource::Battery);
+    let mut engine = engine(TIMES, PowerSource::Battery);
     engine.on_snapshot(0, idle_world(0));
     engine.on_due(mins(15));
     let out = engine.on_snapshot(mins(16), busy_world(mins(16)));
@@ -160,7 +163,7 @@ fn activity_cancels_the_announce() {
 
 #[test]
 fn a_late_announce_runs_in_full() {
-    let mut engine = engine("", PowerSource::Battery);
+    let mut engine = engine(TIMES, PowerSource::Battery);
     engine.on_snapshot(0, idle_world(0));
     let out = engine.on_due(mins(20));
     assert!(logind_actions(&out).is_empty());
@@ -179,7 +182,7 @@ fn an_action_waits_for_a_fresh_read() {
 
 #[test]
 fn any_inhibitor_holds_and_its_end_is_activity() {
-    let mut engine = engine("", PowerSource::Battery);
+    let mut engine = engine(TIMES, PowerSource::Battery);
     let held = Snapshot {
         sessions: vec![session("1", true, 0)],
         inhibitors: vec![inhibitor("sleep", "block-weak")],
@@ -195,7 +198,7 @@ fn any_inhibitor_holds_and_its_end_is_activity() {
 
 #[test]
 fn a_delay_inhibitor_does_not_hold() {
-    let mut engine = engine("", PowerSource::Battery);
+    let mut engine = engine(TIMES, PowerSource::Battery);
     let snapshot = Snapshot {
         sessions: vec![session("1", true, 0)],
         inhibitors: vec![
@@ -209,7 +212,7 @@ fn a_delay_inhibitor_does_not_hold() {
 
 #[test]
 fn closing_and_background_sessions_do_not_count() {
-    let mut engine = engine("", PowerSource::Battery);
+    let mut engine = engine(TIMES, PowerSource::Battery);
     let mut closing = session("2", false, 0);
     closing.state = SessionState::Closing;
     let mut background = session("3", false, 0);
@@ -223,8 +226,35 @@ fn closing_and_background_sessions_do_not_count() {
 }
 
 #[test]
-fn a_session_in_use_that_leaves_is_activity() {
+fn with_no_settings_nothing_comes() {
     let mut engine = engine("", PowerSource::Battery);
+    engine.on_snapshot(0, idle_world(0));
+    assert_eq!(engine.view().state, State::Idle);
+    assert_eq!(engine.next_due(), None);
+}
+
+#[test]
+fn a_greeter_counts_unless_left_out() {
+    let mut greeter = session("2", false, 0);
+    greeter.class = "greeter".to_owned();
+    let snapshot = Snapshot {
+        sessions: vec![session("1", true, 0), greeter],
+        inhibitors: Vec::new(),
+    };
+    let mut by_default = engine(TIMES, PowerSource::Battery);
+    by_default.on_snapshot(0, snapshot.clone());
+    assert_eq!(by_default.view().state, State::Active);
+    let mut no_greeter = engine(
+        "[Sessions]\nClasses=user\n[IdleBattery]\nIdleTime=15m\n",
+        PowerSource::Battery,
+    );
+    no_greeter.on_snapshot(0, snapshot);
+    assert_eq!(no_greeter.view().state, State::Idle);
+}
+
+#[test]
+fn a_session_in_use_that_leaves_is_activity() {
+    let mut engine = engine(TIMES, PowerSource::Battery);
     let two = Snapshot {
         sessions: vec![session("1", true, 0), session("2", false, 0)],
         inhibitors: Vec::new(),
@@ -237,7 +267,7 @@ fn a_session_in_use_that_leaves_is_activity() {
 
 #[test]
 fn no_session_is_idle() {
-    let mut engine = engine("", PowerSource::Ac);
+    let mut engine = engine(TIMES, PowerSource::Ac);
     engine.on_snapshot(0, Snapshot::default());
     assert_eq!(engine.view().state, State::Idle);
     assert_eq!(engine.next_due(), Some((mins(60), Due::Announce)));
@@ -323,7 +353,7 @@ fn a_change_of_power_is_a_new_count() {
 
 #[test]
 fn unknown_power_is_ac_with_no_new_count() {
-    let mut engine = engine("", PowerSource::Ac);
+    let mut engine = engine(TIMES, PowerSource::Ac);
     engine.on_snapshot(0, idle_world(0));
     let out = engine.on_power(mins(10), PowerSource::Unknown);
     assert!(!has_line(&out, Level::Info, "the times moved"));
@@ -372,7 +402,7 @@ fn upower_gone_and_back() {
         Vec::new(),
     );
     assert!(has_line(&out, Level::Warning, "upower: no answer"));
-    let mut engine = engine("", PowerSource::Ac);
+    let mut engine = engine(TIMES, PowerSource::Ac);
     let out = engine.on_power(0, PowerSource::Unknown);
     assert!(has_line(&out, Level::Warning, "upower: no answer"));
     let out = engine.on_power(1, PowerSource::Ac);

@@ -25,26 +25,50 @@ pub enum Error {
         /// The error of the system.
         source: std::io::Error,
     },
-    /// The signal `SIGTERM` cannot be followed.
+    /// A signal cannot be followed.
     Signal {
+        /// The name of the signal.
+        name: &'static str,
         /// The error of the system.
         source: std::io::Error,
     },
     /// logind left the bus: the service exits, and systemd starts it again.
     LogindGone,
-    /// `systemd-inhibit` cannot be started.
-    InhibitStart {
+    /// The agent of polkit on the terminal cannot be started.
+    Agent {
         /// The error of the system.
         source: std::io::Error,
     },
-    /// `systemd-inhibit` ended before its inhibitor was held: logind or
-    /// polkit said no.
-    InhibitRefused {
-        /// How it ended.
-        status: String,
+    /// The holder of the inhibitor cannot be started, or its word cannot
+    /// be read.
+    HolderStart {
+        /// The error of the system.
+        source: std::io::Error,
     },
-    /// The inhibitor did not come in time.
-    InhibitNotSeen,
+    /// The holder ended with no word.
+    HolderGone,
+    /// The holder cannot write its word.
+    HolderWord {
+        /// The error of the system.
+        source: std::io::Error,
+    },
+    /// The holder cannot leave the terminal.
+    Detach {
+        /// The error of the system.
+        source: std::io::Error,
+    },
+    /// The holder did not get the inhibitor: logind or polkit said no.
+    InhibitRefused {
+        /// What the holder said.
+        reason: String,
+    },
+    /// The command to run under the inhibitor cannot be started.
+    Run {
+        /// The program of the command.
+        program: String,
+        /// The error of the system.
+        source: std::io::Error,
+    },
     /// The process that holds an inhibitor cannot be stopped.
     InhibitStop {
         /// Its pid.
@@ -62,16 +86,15 @@ impl fmt::Display for Error {
             }
             Self::Bus { what, .. } => write!(f, "cannot {what}"),
             Self::SessionMonitor { .. } => f.write_str("cannot start the monitor of sd-login"),
-            Self::Signal { .. } => f.write_str("cannot follow SIGTERM"),
+            Self::Signal { name, .. } => write!(f, "cannot follow {name}"),
             Self::LogindGone => f.write_str("logind left the bus"),
-            Self::InhibitStart { .. } => f.write_str("cannot start systemd-inhibit"),
-            Self::InhibitRefused { status } => {
-                write!(
-                    f,
-                    "the inhibitor was refused: systemd-inhibit ended, {status}"
-                )
-            }
-            Self::InhibitNotSeen => f.write_str("the inhibitor did not come in time"),
+            Self::Agent { .. } => f.write_str("cannot start pkttyagent"),
+            Self::HolderStart { .. } => f.write_str("cannot start the holder of the inhibitor"),
+            Self::HolderGone => f.write_str("the holder of the inhibitor ended with no word"),
+            Self::HolderWord { .. } => f.write_str("the holder cannot write its word"),
+            Self::Detach { .. } => f.write_str("the holder cannot leave the terminal"),
+            Self::InhibitRefused { reason } => write!(f, "the inhibitor was refused: {reason}"),
+            Self::Run { program, .. } => write!(f, "cannot run {program}"),
             Self::InhibitStop { pid, .. } => write!(f, "cannot stop the inhibitor of pid {pid}"),
         }
     }
@@ -83,10 +106,14 @@ impl std::error::Error for Error {
             Self::ReadSettings { source, .. } => Some(source),
             Self::Bus { source, .. } => Some(source),
             Self::SessionMonitor { source }
-            | Self::Signal { source }
-            | Self::InhibitStart { source }
+            | Self::Signal { source, .. }
+            | Self::Agent { source }
+            | Self::HolderStart { source }
+            | Self::HolderWord { source }
+            | Self::Detach { source }
+            | Self::Run { source, .. }
             | Self::InhibitStop { source, .. } => Some(source),
-            Self::LogindGone | Self::InhibitRefused { .. } | Self::InhibitNotSeen => None,
+            Self::LogindGone | Self::HolderGone | Self::InhibitRefused { .. } => None,
         }
     }
 }

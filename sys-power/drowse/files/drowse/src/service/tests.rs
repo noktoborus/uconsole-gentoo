@@ -116,7 +116,7 @@ fn world(power: PowerSource) -> (MockWorld, UnboundedReceiver<Event>) {
 }
 
 #[tokio::test(start_paused = true)]
-async fn the_defaults_power_off_after_17_minutes() {
+async fn a_stage_powers_off_after_17_minutes() {
     let (world, mut events) = world(PowerSource::Battery);
     let publisher = MockPublisher::default();
     let clock = TokioClock {
@@ -128,7 +128,7 @@ async fn the_defaults_power_off_after_17_minutes() {
         &mut events,
         &publisher,
         &clock,
-        Settings::default(),
+        settings::parse("[IdleBattery]\nIdleTime=15m\n").0,
         stop,
     )
     .await

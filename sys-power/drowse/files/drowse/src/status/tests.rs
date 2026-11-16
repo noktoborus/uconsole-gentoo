@@ -1,6 +1,7 @@
 //! Tests of what drowse-status shows.
 
 use super::*;
+use crate::inhibit::WHO;
 
 const MINUTE: u64 = 60_000_000;
 
@@ -153,6 +154,10 @@ fn the_holds() {
     let mut seen = observed(Some(service("active", 0)));
     seen.inhibitors = vec![inhibitor(WHO, "emerge", 1000), inhibitor("x", "y", 1001)];
     assert_eq!(show(&seen, 0, &name).alt, "own");
+    seen.inhibitors = vec![inhibitor("until emerge -uDN @world", "", 1000)];
+    assert_eq!(show(&seen, 0, &name).alt, "own");
+    seen.inhibitors = vec![inhibitor("until make", "", 1001)];
+    assert_eq!(show(&seen, 0, &name).alt, "other");
     seen.inhibitors.clear();
     seen.sessions = Some(vec![session("bob", 1001, "tty2", "")]);
     let shown = show(&seen, 0, &name);

@@ -19,7 +19,7 @@ pub enum Warning {
         /// The line.
         line: usize,
     },
-    /// A section that is not of a stage.
+    /// A section that is not `[Sessions]` and not of a stage.
     UnknownSection {
         /// The name of the section.
         name: String,

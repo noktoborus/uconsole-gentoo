@@ -30,6 +30,11 @@ pub trait Manager {
     /// Every session.
     fn list_sessions_ex(&self) -> zbus::Result<Vec<SessionEx>>;
 
+    /// Takes an inhibitor: what, who, why, mode. It holds while the fd
+    /// is open. polkit may ask a password of an agent.
+    #[zbus(allow_interactive_auth)]
+    fn inhibit(&self, what: &str, who: &str, why: &str, mode: &str) -> zbus::Result<zbus::OwnedFd>;
+
     /// Every inhibitor of every user.
     fn list_inhibitors(&self) -> zbus::Result<Vec<InhibitorRow>>;
 

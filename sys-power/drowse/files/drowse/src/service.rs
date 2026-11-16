@@ -84,7 +84,10 @@ pub async fn serve() -> Result<()> {
     let (system, mut events) = crate::world::system::connect().await?;
     let publisher = BusPublisher::new(system.connection().clone());
     let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-        .map_err(|source| Error::Signal { source })?;
+        .map_err(|source| Error::Signal {
+        name: "SIGTERM",
+        source,
+    })?;
     let stop = async move {
         terminate.recv().await;
     };

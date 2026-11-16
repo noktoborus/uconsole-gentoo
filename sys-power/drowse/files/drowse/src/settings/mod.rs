@@ -1,7 +1,9 @@
 //! The settings of the service: the file `/etc/drowse.conf`, a section a
-//! stage, the stages of the battery and of AC.
+//! stage, the stages of the battery and of AC; and `[Sessions]`, the
+//! classes of the sessions that count.
 
 pub mod action;
+pub mod sessions;
 mod syntax;
 pub mod time;
 pub mod warning;
@@ -48,14 +50,6 @@ impl Power {
             Self::Ac => "ac",
         }
     }
-
-    /// The default idle time of its first stage.
-    fn default_idle_time(self) -> Duration {
-        match self {
-            Self::Battery => Duration::from_secs(15 * 60),
-            Self::Ac => Duration::from_secs(60 * 60),
-        }
-    }
 }
 
 /// The default time of the announce.
@@ -91,10 +85,11 @@ impl Stage {
             .unwrap_or_else(|| self.action.as_written())
     }
 
-    /// A first stage with only its defaults.
-    fn default_for(power: Power) -> Self {
+    /// A first stage with only its defaults: `IdleTime=Never`, so with
+    /// no settings file the service does nothing.
+    fn default_for(_power: Power) -> Self {
         Self {
-            idle_time: Span::Time(power.default_idle_time()),
+            idle_time: Span::Never,
             countdown: Span::Time(DEFAULT_COUNTDOWN),
             action: Action::Logind(DEFAULT_ACTION),
             hint: None,
@@ -104,14 +99,20 @@ impl Stage {
 }
 
 /// The settings: the stages of each power source, the first one always
-/// there.
+/// there; the classes of the sessions that count.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Settings {
     battery: Vec<Stage>,
     ac: Vec<Stage>,
+    classes: BTreeSet<String>,
 }
 
 impl Settings {
+    /// Whether a session of this class counts in the idle state.
+    pub fn counts_class(&self, class: &str) -> bool {
+        self.classes.contains(class)
+    }
+
     /// The stages of a power source, the first one first.
     pub fn stages(&self, power: Power) -> &[Stage] {
         match power {
@@ -126,6 +127,7 @@ impl Default for Settings {
         Self {
             battery: vec![Stage::default_for(Power::Battery)],
             ac: vec![Stage::default_for(Power::Ac)],
+            classes: sessions::default_classes(),
         }
     }
 }
@@ -152,7 +154,7 @@ struct Written {
     line: usize,
 }
 
-/// The keys of one section of a stage as written; a later key wins.
+/// The keys of one section as written; a later key wins.
 #[derive(Debug, Clone, Default)]
 struct RawStage {
     section: String,
@@ -162,19 +164,64 @@ struct RawStage {
 /// Reads the text of a settings file.
 pub fn parse(text: &str) -> (Settings, Vec<Warning>) {
     let (entries, mut warnings) = syntax::parse(text);
-    let raw = collect(&entries, &mut warnings);
+    let (raw, raw_sessions) = collect(&entries, &mut warnings);
     let mut stages_of = |power: Power| build_stages(power, &raw, &mut warnings);
     let battery = stages_of(Power::Battery);
     let ac = stages_of(Power::Ac);
-    (Settings { battery, ac }, warnings)
+    let classes = read_key(
+        &raw_sessions,
+        sessions::CLASSES,
+        sessions::parse,
+        &mut warnings,
+    )
+    .unwrap_or_else(sessions::default_classes);
+    (
+        Settings {
+            battery,
+            ac,
+            classes,
+        },
+        warnings,
+    )
 }
 
-/// Sorts the entries into the stages they belong to.
-fn collect(entries: &[Entry], warnings: &mut Vec<Warning>) -> BTreeMap<(Power, u32), RawStage> {
-    let mut raw: BTreeMap<(Power, u32), RawStage> = BTreeMap::new();
+/// Takes a key into a section as written, or warns that the section has
+/// no such key.
+fn put_key(raw: &mut RawStage, keys: &[&'static str], entry: &Entry, warnings: &mut Vec<Warning>) {
+    let Some(key) = keys.iter().find(|known| **known == entry.key) else {
+        warnings.push(Warning::UnknownKey {
+            section: entry.section.clone(),
+            key: entry.key.clone(),
+            line: entry.line,
+        });
+        return;
+    };
+    if raw.section.is_empty() {
+        raw.section = entry.section.clone();
+    }
+    raw.keys.insert(
+        key,
+        Written {
+            value: entry.value.clone(),
+            line: entry.line,
+        },
+    );
+}
+
+/// The stages as written, by power source and number.
+type RawStages = BTreeMap<(Power, u32), RawStage>;
+
+/// Sorts the entries into the stages they belong to, and `[Sessions]`.
+fn collect(entries: &[Entry], warnings: &mut Vec<Warning>) -> (RawStages, RawStage) {
+    let mut raw: RawStages = BTreeMap::new();
+    let mut raw_sessions = RawStage::default();
     let mut unknown_sections = BTreeSet::new();
     let mut first_written_as: BTreeMap<Power, BTreeSet<bool>> = BTreeMap::new();
     for entry in entries {
+        if entry.section == sessions::SECTION {
+            put_key(&mut raw_sessions, &sessions::KEYS, entry, warnings);
+            continue;
+        }
         let Some(place) = stage_of_section(&entry.section) else {
             if unknown_sections.insert(entry.section.clone()) {
                 warnings.push(Warning::UnknownSection {
@@ -190,32 +237,15 @@ fn collect(entries: &[Entry], warnings: &mut Vec<Warning>) -> BTreeMap<(Power, u
                 .or_default()
                 .insert(place.with_number);
         }
-        let Some(key) = KEYS.iter().find(|known| **known == entry.key) else {
-            warnings.push(Warning::UnknownKey {
-                section: entry.section.clone(),
-                key: entry.key.clone(),
-                line: entry.line,
-            });
-            continue;
-        };
         let stage = raw.entry((place.power, place.number)).or_default();
-        if stage.section.is_empty() {
-            stage.section = entry.section.clone();
-        }
-        stage.keys.insert(
-            key,
-            Written {
-                value: entry.value.clone(),
-                line: entry.line,
-            },
-        );
+        put_key(stage, &KEYS, entry, warnings);
     }
     for (power, forms) in first_written_as {
         if forms.len() > 1 {
             warnings.push(Warning::FirstStageTwice { power });
         }
     }
-    raw
+    (raw, raw_sessions)
 }
 
 /// Where a section belongs: its power source, its number, and whether the

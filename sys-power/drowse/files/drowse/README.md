@@ -21,6 +21,14 @@ exec swayidle idlehint 1
 
 Other lines of swayidle (the screen off, the lock) are as you like.
 
+### The login screen
+
+A login screen (a session of class `greeter`) counts, as for logind. If
+it sets no idle hint, it is never idle, and the system stays up while it
+is shown. Run swayidle with `idlehint` in its sway, or leave `greeter`
+out of `Classes=` of `[Sessions]`: then with nobody logged in the system
+is idle.
+
 ### logind: IdleAction=ignore
 
 Keep `IdleAction=ignore` (the default): the service does the action, not
@@ -44,6 +52,36 @@ an inhibitor of mode `block-weak` (as that of `drowse-inhibit`), but
 not one of mode `block`.
 
 ### The action
+
+With no `/etc/drowse.conf` the service does nothing: the default
+`IdleTime` is `Never`. The file of the package sets, on battery, the
+power save at 10 min of idle and `poweroff` at 50 min; on AC nothing.
+
+The power save is the profile of TuneD `drowse-cm5-powersave`:
+`powersave`, the CPU at 800 MHz at most, and USB autosuspend on every
+device but those of `KEEP` in `usb-autosuspend.sh`: `434b:5543`, the
+keyboard of the uConsole, and `1eaf:*`, its bootloader. The hubs these hang on, up to
+the root hub, are set to never suspend. The script writes the values
+before back when the profile ends. The package gives it as an
+example only (`examples/tuned/`, installed with the documentation);
+copy it to the profiles of TuneD:
+
+```
+cp -r /usr/share/doc/drowse-*/examples/tuned/drowse-cm5-powersave \
+    /etc/tuned/profiles/
+```
+
+With no such profile the power save fails, and the `poweroff` still
+comes. It needs:
+
+- tuned with tuned-ppd. tuned-ppd keeps the profile the user chose, and
+  `systemctl try-restart tuned-ppd.service` (the `Resume`) sets it
+  again. With tuned and no tuned-ppd, set `Resume=tuned-adm profile
+  <the profile>`. With no tuned the power save fails, and the `poweroff`
+  still comes.
+- `arm_freq_min=800` or lower in `config.txt`. cpufreq keeps the limit
+  inside the range of the firmware, and the default lowest of the CM5 is
+  1500 MHz.
 
 The default action is `poweroff`: it works on any device. A sleep needs
 the kernel and the system set up for it (`CONFIG_SUSPEND`, a place to
@@ -81,7 +119,28 @@ the policy of D-Bus of the package. Others see the state with no list.
 drowsed does not count a session that is closing. So what a user leaves
 running after the logout (a build, a download, tmux) does not hold the
 system up. Hold it by an inhibitor: `drowse-inhibit on`, or
-`systemd-inhibit --what=sleep:shutdown <command>`.
+`drowse-inhibit -- <command>` while the command runs.
+
+### drowse-inhibit and polkit
+
+`drowse-inhibit` takes an inhibitor of `sleep:shutdown` from logind. In a
+local session polkit gives it with no password. From ssh polkit asks the
+password of an admin. On a terminal the tool runs `pkttyagent` (of
+polkit), and the password is typed there. With no `pkttyagent`, or with
+no terminal, the inhibitor from ssh is refused. Root is never asked: the
+tool then starts no agent.
+
+### A long command: emerge
+
+Hold the system up while the command runs:
+
+```
+drowse-inhibit -- emerge -uDN @world
+```
+
+The inhibitor ends with the command; its exit code is that of the
+command. As root (`sudo drowse-inhibit -- emerge ...`) the inhibitor is
+of uid 0: the module of waybar shows it as `other`, not `own`.
 
 ### KillUserProcesses=yes (recommended)
 

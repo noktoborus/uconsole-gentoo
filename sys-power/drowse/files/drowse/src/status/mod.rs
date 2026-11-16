@@ -8,7 +8,7 @@ use std::time::Duration;
 use rust_i18n::t;
 
 use crate::bus::SessionRow;
-use crate::inhibit::WHO;
+use crate::inhibit::is_own;
 use crate::world::Inhibitor;
 
 /// The longest `why` shown, in characters.
@@ -58,18 +58,19 @@ pub struct Shown {
 }
 
 impl Observed {
-    /// Whether an inhibitor of the tool of this user holds.
+    /// Whether an inhibitor of the tool of this user holds: of `on` or of
+    /// a command.
     fn own_held(&self) -> bool {
         self.inhibitors
             .iter()
-            .any(|inhibitor| inhibitor.who == WHO && inhibitor.uid == self.uid)
+            .any(|inhibitor| is_own(&inhibitor.who) && inhibitor.uid == self.uid)
     }
 
     /// Whether an inhibitor of another holds.
     fn other_held(&self) -> bool {
         self.inhibitors
             .iter()
-            .any(|inhibitor| inhibitor.who != WHO || inhibitor.uid != self.uid)
+            .any(|inhibitor| !is_own(&inhibitor.who) || inhibitor.uid != self.uid)
     }
 
     /// The hold: `own`, `other`, `session-other`, `session-own`, `none`,

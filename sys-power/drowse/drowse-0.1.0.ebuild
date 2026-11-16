@@ -155,7 +155,7 @@ RDEPEND="
 "
 BDEPEND="virtual/pkgconfig"
 
-# files/ sha256: ca395032674c69b58570853d5679901edacc96284ed415e1d1e8f4710babb5cc
+# files/ sha256: c43991978ca37c8e7ced77346031cb6ebf8786120e47726213b379c51d84caf5
 
 src_unpack() {
 	cargo_src_unpack
@@ -176,4 +176,11 @@ src_install() {
 	insinto /etc/xdg/waybar
 	doins waybar/drowse.jsonc waybar/drowse.css
 	dodoc README.md
+	# The profile of TuneD is an example the user copies by hand; kept
+	# whole, not compressed.
+	docinto examples
+	dodoc -r examples/.
+	docompress -x "/usr/share/doc/${PF}/examples"
+	# TuneD runs the script of the profile by its path.
+	fperms +x "/usr/share/doc/${PF}/examples/tuned/drowse-cm5-powersave/usb-autosuspend.sh"
 }
