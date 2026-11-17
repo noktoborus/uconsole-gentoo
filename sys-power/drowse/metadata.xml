@@ -7,5 +7,7 @@
 	<longdescription>See README.md and REQUIREMENTS.md of drowse.</longdescription>
 	<use>
 		<flag name="cm5-tuned">Install the profiles of <pkg>sys-apps/tuned</pkg> cm5-powersave and cm5-powersave-no-radio (a Raspberry Pi 5 or CM5 while idle) as profiles, not only as examples</flag>
+		<flag name="sway">Install /etc/sway/config.d/80-idlehint.conf: a <pkg>gui-apps/swayidle</pkg> that sets the idle hint of the session of sway for logind, which drowse needs</flag>
+		<flag name="waybar">Install the module of <pkg>gui-apps/waybar</pkg> and its style in /etc/xdg/waybar</flag>
 	</use>
 </pkgmetadata>
