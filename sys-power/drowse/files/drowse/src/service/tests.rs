@@ -128,7 +128,7 @@ async fn a_stage_powers_off_after_17_minutes() {
         &mut events,
         &publisher,
         &clock,
-        settings::parse("[IdleBattery]\nIdleTime=15m\nAction=poweroff\n").0,
+        settings::parse("main:\n  battery: [{after: 15m, action: poweroff}]\n").unwrap(),
         stop,
     )
     .await
@@ -145,9 +145,10 @@ async fn a_stage_powers_off_after_17_minutes() {
 
 #[tokio::test(start_paused = true)]
 async fn activity_cancels_and_the_stages_run_their_resume() {
-    let (settings, _) = settings::parse(
-        "[IdleBattery]\nIdleTime=1m\nCountdown=Never\nAction=nmcli radio all off\nResume=nmcli radio all on\n",
-    );
+    let settings = settings::parse(
+        "main:\n  battery: [{after: 1m, enter: nmcli radio all off, leave: nmcli radio all on}]\n",
+    )
+    .unwrap();
     let (world, mut events) = world(PowerSource::Battery);
     let sender = world.events.clone();
     let publisher = MockPublisher::default();
@@ -176,9 +177,10 @@ async fn activity_cancels_and_the_stages_run_their_resume() {
 
 #[tokio::test(start_paused = true)]
 async fn the_stop_of_the_service_runs_the_resume() {
-    let (settings, _) = settings::parse(
-        "[IdleAC]\nIdleTime=0\nCountdown=Never\nAction=tuned-adm profile powersave\nResume=tuned-adm auto_profile\n",
-    );
+    let settings = settings::parse(
+        "main:\n  ac: [{after: 0, enter: tuned-adm profile powersave, leave: tuned-adm auto_profile}]\n",
+    )
+    .unwrap();
     let (world, mut events) = world(PowerSource::Ac);
     let publisher = MockPublisher::default();
     let clock = TokioClock {

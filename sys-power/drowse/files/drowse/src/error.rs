@@ -13,6 +13,37 @@ pub enum Error {
         /// The error of the system.
         source: std::io::Error,
     },
+    /// The settings file is not valid YAML or has an unknown key or value.
+    SettingsYaml {
+        /// The error from the YAML reader.
+        source: serde_yaml_ng::Error,
+    },
+    /// A section sets a logind action and a command.
+    SettingsActionConflict {
+        /// The place of the section.
+        place: String,
+    },
+    /// A logind action is not supported by drowse.
+    SettingsActionUnknown {
+        /// The action as written.
+        action: String,
+        /// The place of the section.
+        place: String,
+    },
+    /// A logind action is not the last section of its chain.
+    SettingsActionNotLast {
+        /// The chain name.
+        chain: String,
+        /// The zero based place of the section.
+        section: usize,
+    },
+    /// A command in the settings cannot be split into words.
+    SettingsCommand {
+        /// The command as written.
+        command: String,
+        /// The place of the section.
+        place: String,
+    },
     /// A call on the system bus failed.
     Bus {
         /// What the call was for.
@@ -84,6 +115,26 @@ impl fmt::Display for Error {
             Self::ReadSettings { path, .. } => {
                 write!(f, "cannot read the settings file {}", path.display())
             }
+            Self::SettingsYaml { source } => match source.location() {
+                Some(location) => {
+                    write!(f, "invalid settings at line {}: {source}", location.line())
+                }
+                None => write!(f, "invalid settings: {source}"),
+            },
+            Self::SettingsActionConflict { place } => {
+                write!(f, "a logind action cannot have a command in {place}")
+            }
+            Self::SettingsActionUnknown { action, place } => {
+                write!(f, "unknown logind action {action} in {place}")
+            }
+            Self::SettingsActionNotLast { chain, section } => write!(
+                f,
+                "logind action in section {} of chain {chain} is not last",
+                section + 1
+            ),
+            Self::SettingsCommand { command, place } => {
+                write!(f, "invalid command in {place}: {command}")
+            }
             Self::Bus { what, .. } => write!(f, "cannot {what}"),
             Self::SessionMonitor { .. } => f.write_str("cannot start the monitor of sd-login"),
             Self::Signal { name, .. } => write!(f, "cannot follow {name}"),
@@ -104,6 +155,7 @@ impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::ReadSettings { source, .. } => Some(source),
+            Self::SettingsYaml { source } => Some(source),
             Self::Bus { source, .. } => Some(source),
             Self::SessionMonitor { source }
             | Self::Signal { source, .. }
@@ -113,7 +165,13 @@ impl std::error::Error for Error {
             | Self::Detach { source }
             | Self::Run { source, .. }
             | Self::InhibitStop { source, .. } => Some(source),
-            Self::LogindGone | Self::HolderGone | Self::InhibitRefused { .. } => None,
+            Self::SettingsActionConflict { .. }
+            | Self::SettingsActionUnknown { .. }
+            | Self::SettingsActionNotLast { .. }
+            | Self::SettingsCommand { .. }
+            | Self::LogindGone
+            | Self::HolderGone
+            | Self::InhibitRefused { .. } => None,
         }
     }
 }

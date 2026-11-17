@@ -17,6 +17,7 @@
         "format-icons": {
             "unknown": "?",
             "announced": "⏰",
+            "held": "🔒",
             "own": "☕",
             "other": "🔒",
             "session-other": "👤",

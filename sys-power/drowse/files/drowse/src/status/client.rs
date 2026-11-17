@@ -11,11 +11,9 @@ use zbus::{Connection, MatchRule, MessageStream, fdo, proxy};
 
 use super::{Observed, ServiceState, show};
 use crate::bus::{NAME, SessionRow};
-use crate::engine::holding;
 use crate::error::{Error, Result};
 use crate::service::{Clock, Monotonic};
 use crate::world::Inhibitor;
-use crate::world::logind::ManagerProxy;
 
 /// The object of the state of the service.
 #[proxy(
@@ -47,6 +45,10 @@ trait Held {
     /// The sessions that hold the system up.
     #[zbus(property)]
     fn held_by_sessions(&self) -> zbus::Result<Vec<SessionRow>>;
+
+    /// The inhibitors that hold a due entry.
+    #[zbus(property)]
+    fn held_by_inhibitors(&self) -> zbus::Result<Vec<(String, String, String, String, u32, u32)>>;
 }
 
 /// Wraps an error of the bus with what was done.
@@ -57,7 +59,6 @@ fn bus(what: &'static str) -> impl FnOnce(zbus::Error) -> Error {
 /// The tool on the system bus.
 struct Client {
     conn: Connection,
-    logind: ManagerProxy<'static>,
     state: StateProxy<'static>,
     held: HeldProxy<'static>,
 }
@@ -68,9 +69,6 @@ impl Client {
         let conn = Connection::system()
             .await
             .map_err(bus("connect to the system bus"))?;
-        let logind = ManagerProxy::new(&conn)
-            .await
-            .map_err(bus("make the proxy of logind"))?;
         let state = StateProxy::builder(&conn)
             .cache_properties(zbus::proxy::CacheProperties::No)
             .build()
@@ -81,12 +79,7 @@ impl Client {
             .build()
             .await
             .map_err(bus("make the proxy of the service"))?;
-        Ok(Self {
-            conn,
-            logind,
-            state,
-            held,
-        })
+        Ok(Self { conn, state, held })
     }
 
     /// Reads all the tool shows. The service not there, or `HeldBy` not
@@ -98,11 +91,11 @@ impl Client {
         } else {
             Some(Vec::new())
         };
-        let rows = self
-            .logind
-            .list_inhibitors()
-            .await
-            .map_err(bus("list the inhibitors of logind"))?;
+        let rows = if service.is_some() {
+            self.held.held_by_inhibitors().await.unwrap_or_default()
+        } else {
+            Vec::new()
+        };
         let inhibitors: Vec<Inhibitor> = rows
             .into_iter()
             .map(|(what, who, why, mode, uid, pid)| Inhibitor {
@@ -117,7 +110,7 @@ impl Client {
         Ok(Observed {
             service,
             sessions,
-            inhibitors: holding(&inhibitors),
+            inhibitors,
             uid: getuid().as_raw(),
         })
     }

@@ -35,7 +35,7 @@ pub struct StateObject {
 
 #[interface(name = "io.github.noktoborus.Drowse")]
 impl StateObject {
-    /// `active`, `idle` or `announced`.
+    /// `active`, `idle`, `announced` or `held`.
     #[zbus(property)]
     fn state(&self) -> String {
         self.state.clone()
@@ -70,7 +70,7 @@ impl HeldObject {
         self.sessions.clone()
     }
 
-    /// The inhibitors that hold the system up.
+    /// The inhibitors that hold a due entry.
     #[zbus(property)]
     fn held_by_inhibitors(&self) -> Vec<InhibitorRow> {
         self.inhibitors.clone()

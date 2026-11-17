@@ -2,13 +2,13 @@
 # of its stages (a command and its undo, an action of power); its state
 # is on the system bus. drowse-inhibit holds the system by hand,
 # drowse-status shows the state, for waybar too: /etc/xdg/waybar has its
-# module. /etc/drowse.conf has the settings. The service, the restart
-# on a change of /etc/drowse.conf and the start after a sleep are
+# module. /etc/drowse.yaml has the settings. The service, the restart
+# on a change of /etc/drowse.yaml and the start after a sleep are
 # enabled by a preset.
 #
 # The source is a copy of drowse in files/drowse, with the sum below;
 # CRATES is its Cargo.lock. The modes of files/ are not kept.
-# /etc/drowse.conf has every key with its default in comments; /etc is
+# /etc/drowse.yaml holds the YAML chains; /etc is
 # in CONFIG_PROTECT, so a change made on the device is kept on an update.
 #
 # The profiles of TuneD cm5-powersave, the power save of the first stage,
@@ -90,6 +90,7 @@ CRATES="
 	rust-i18n@4.2.4
 	rustix@1.1.6
 	rustversion@1.0.23
+	ryu@1.0.23
 	same-file@1.0.6
 	scopeguard@1.2.0
 	serde-saphyr@1.3.0
@@ -99,6 +100,7 @@ CRATES="
 	serde_json@1.0.154
 	serde_repr@0.1.21
 	serde_spanned@0.6.9
+	serde_yaml_ng@0.10.0
 	shlex@2.0.1
 	signal-hook-registry@1.4.8
 	simdutf8@0.1.5
@@ -121,6 +123,7 @@ CRATES="
 	uds_windows@1.2.1
 	unicode-ident@1.0.27
 	unicode-width@0.2.3
+	unsafe-libyaml@0.2.11
 	uuid@1.29.2
 	walkdir@2.5.0
 	wasi@0.11.1+wasi-snapshot-preview1
@@ -163,7 +166,7 @@ RDEPEND="
 "
 BDEPEND="virtual/pkgconfig"
 
-# files/ sha256: 3edb9a84c265ab930a6d5edc0ff018864936a8e5cefb237298a52265b197ab6a
+# files/ sha256: 75b000594b0e39dcc94292898e65ac70e2b5db5aff29329b14ddb5902c6742a8
 
 src_unpack() {
 	cargo_src_unpack
@@ -180,11 +183,11 @@ src_install() {
 	insinto /usr/share/dbus-1/system.d
 	doins dbus/io.github.noktoborus.Drowse.conf
 	insinto /etc
-	doins etc/drowse.conf
+	doins etc/drowse.yaml
 	# The file as the package gives it, to compare with or to take again:
-	# /etc/drowse.conf is changed by the user.
+	# /etc/drowse.yaml is changed by the user.
 	insinto /usr/share/drowse
-	doins etc/drowse.conf
+	doins etc/drowse.yaml
 	insinto /etc/xdg/waybar
 	doins waybar/drowse.jsonc waybar/drowse.css
 	dodoc README.md

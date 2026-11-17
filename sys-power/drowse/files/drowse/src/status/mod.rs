@@ -23,7 +23,7 @@ const SECONDS_BELOW: Duration = Duration::from_secs(3 * 60);
 /// The state of the service as read on the bus.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServiceState {
-    /// `active`, `idle` or `announced`.
+    /// `active`, `idle`, `announced` or `held`.
     pub state: String,
     /// The action of the next stage and when it comes.
     pub scheduled: (String, u64),
@@ -114,10 +114,12 @@ pub fn show(observed: &Observed, now: u64, user_of: &dyn Fn(u32) -> String) -> S
     let state = match service.state.as_str() {
         "idle" => "idle",
         "announced" => "announced",
+        "held" => "held",
         _ => "active",
     };
     let hold = observed.hold();
     let alt = match (state, hold) {
+        ("held", _) => "held",
         ("announced", _) => "announced",
         (_, "own") => "own",
         (_, "other") => "other",
@@ -136,6 +138,7 @@ pub fn show(observed: &Observed, now: u64, user_of: &dyn Fn(u32) -> String) -> S
         (state != "active" && *at > 0).then(|| Duration::from_micros(at.saturating_sub(now)));
     let text = left.map(time_left).unwrap_or_default();
     let mut tooltip = match (state, left) {
+        ("held", _) => held_tooltip(observed, action, user_of),
         ("announced", Some(left)) => {
             vec![t!("status.announced", action = action, left = time_left(left)).into_owned()]
         }
@@ -143,6 +146,9 @@ pub fn show(observed: &Observed, now: u64, user_of: &dyn Fn(u32) -> String) -> S
             vec![t!("status.planned", action = action, left = time_left(left)).into_owned()]
         }
         ("idle", None) => vec![t!("status.idle_nothing").into_owned()],
+        ("announced", None) if !observed.inhibitors.is_empty() => {
+            held_tooltip(observed, action, user_of)
+        }
         ("announced", None) => vec![t!("status.idle").into_owned()],
         _ => holders(observed, user_of),
     };
@@ -154,6 +160,12 @@ pub fn show(observed: &Observed, now: u64, user_of: &dyn Fn(u32) -> String) -> S
         tooltip,
         again_in: left.map(again_in),
     }
+}
+
+fn held_tooltip(observed: &Observed, action: &str, user_of: &dyn Fn(u32) -> String) -> Vec<String> {
+    let mut lines = vec![t!("status.held", action = action).into_owned()];
+    lines.extend(holders(observed, user_of).into_iter().skip(1));
+    lines
 }
 
 /// The lines of what holds the system up.

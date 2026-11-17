@@ -105,34 +105,6 @@ impl Command {
     }
 }
 
-/// The action of a stage.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Action {
-    /// An action of logind.
-    Logind(LogindAction),
-    /// A command, run in the unit of its stage.
-    Command(Command),
-}
-
-impl Action {
-    /// Reads `Action=`: a name of logind, else a command.
-    pub fn parse(value: &str) -> Option<Self> {
-        let value = value.trim();
-        if let Some(action) = LogindAction::from_name(value) {
-            return Some(Self::Logind(action));
-        }
-        Command::parse(value).map(Self::Command)
-    }
-
-    /// The action as it is written: the name of logind or the line.
-    pub fn as_written(&self) -> &str {
-        match self {
-            Self::Logind(action) => action.name(),
-            Self::Command(command) => command.line(),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -144,23 +116,6 @@ mod tests {
             assert_eq!(action.name(), *name);
         }
         assert_eq!(LogindAction::from_name("PowerOff"), None);
-    }
-
-    #[test]
-    fn action_of_logind() {
-        assert_eq!(
-            Action::parse(" poweroff "),
-            Some(Action::Logind(LogindAction::Poweroff))
-        );
-    }
-
-    #[test]
-    fn action_command() {
-        let Some(Action::Command(command)) = Action::parse("nmcli radio all off") else {
-            panic!("not a command");
-        };
-        assert_eq!(command.words(), ["nmcli", "radio", "all", "off"]);
-        assert_eq!(command.line(), "nmcli radio all off");
     }
 
     #[test]

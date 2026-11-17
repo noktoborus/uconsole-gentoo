@@ -1,0 +1,39 @@
+# /etc/drowse.yaml: the settings of drowsed.
+#
+# With no chains, the service does nothing. A time is seconds or text:
+# 90, 2m, 1h 30min, never.
+#
+# On battery: enter the power save at 10 min of idle. 38 min later, the
+# announce starts; 2 min after it, the power save is left and the system
+# powers off, at 50 min of idle. On AC, nothing.
+
+sessions:
+  classes: [user, user-early, user-light, user-early-light, greeter]
+
+sections:
+  - &mute-powersave
+    after: 10m
+    enter: tuned-adm profile cm5-powersave-no-radio
+    leave: systemctl try-restart tuned-ppd.service
+    hint: radio off
+
+main:
+  battery:
+    - after: 10m
+      enter: tuned-adm profile cm5-powersave
+      leave: systemctl try-restart tuned-ppd.service
+      hint: power save
+    - after: 38m
+      countdown: 2m
+      action: poweroff
+  ac: []
+
+# A lid chain can be set separately. This example enters power save at
+# once, then powers off 10 min later:
+# lid:
+#   battery:
+#     - <<: *mute-powersave
+#       after: 0
+#     - action: poweroff
+#       after: 10m
+#       countdown: never

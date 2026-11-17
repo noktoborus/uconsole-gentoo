@@ -1,5 +1,4 @@
-//! The section `[Sessions]`: which sessions of logind count in the idle
-//! state, by their class.
+//! Which logind session classes count in the idle state.
 
 use std::collections::BTreeSet;
 

@@ -22,9 +22,9 @@ fn stage_number(name: &str) -> usize {
 /// A job asked of systemd.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Job {
-    /// Start the unit: its `Action`.
+    /// Start the unit: its `enter` command.
     Start(String),
-    /// Stop the unit: its `Resume`.
+    /// Stop the unit: its `leave` command.
     Stop(String),
 }
 
@@ -35,7 +35,7 @@ enum Known {
     Down,
     /// Its start runs.
     Starting,
-    /// Started: its `Action` ran.
+    /// Started: its `enter` command ran.
     Up,
     /// Its stop runs.
     Stopping,
@@ -54,12 +54,12 @@ struct Unit {
 pub enum Ended {
     /// Nothing to tell.
     Quiet,
-    /// The start was cut or failed: its `Action` did not end well, and
-    /// there is no `Resume`.
+    /// The start was cut or failed: its `enter` did not end well, and
+    /// there is no `leave`.
     StartFailed,
     /// A stop that waited for the start ran now, late.
     ResumeLate,
-    /// The stop failed or was cut: its `Resume` did not end well.
+    /// The stop failed or was cut: its `leave` did not end well.
     StopFailed,
 }
 

@@ -126,6 +126,38 @@ fn idle_with_no_action() {
 }
 
 #[test]
+fn held_entry_shows_what_waits_and_what_holds_it() {
+    let _language = english();
+    let mut seen = observed(Some(service("held", 0)));
+    seen.service.as_mut().unwrap().scheduled.0 = "power save".to_owned();
+    seen.inhibitors = vec![inhibitor("drowse-inhibit", "build", 1000)];
+    let shown = show(&seen, 0, &name);
+    assert_eq!(shown.text, "");
+    assert_eq!(shown.alt, "held");
+    assert_eq!(shown.class, ["held", "own", "battery"]);
+    assert_eq!(
+        shown.tooltip,
+        [
+            "waiting to enter power save, held by:",
+            " - build by alice",
+            "On battery"
+        ]
+    );
+}
+
+#[test]
+fn announced_entry_keeps_its_state_while_held() {
+    let _language = english();
+    let mut seen = observed(Some(service("announced", 0)));
+    seen.service.as_mut().unwrap().scheduled.0 = "poweroff".to_owned();
+    seen.inhibitors = vec![inhibitor("drowse-inhibit", "build", 1000)];
+    let shown = show(&seen, 0, &name);
+    assert_eq!(shown.alt, "announced");
+    assert_eq!(shown.class[0], "announced");
+    assert_eq!(shown.tooltip[0], "waiting to enter poweroff, held by:");
+}
+
+#[test]
 fn awake_held_by_many() {
     let _language = english();
     let mut seen = observed(Some(service("active", 0)));

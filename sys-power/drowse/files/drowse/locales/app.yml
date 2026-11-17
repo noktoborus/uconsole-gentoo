@@ -33,6 +33,9 @@ status.planned:
 status.announced:
   en: "%{action} in %{left}: no activity"
   ru: "%{action} через %{left} по неактивности"
+status.held:
+  en: "waiting to enter %{action}, held by:"
+  ru: "ожидает входа в %{action}, удерживают:"
 status.inhibitor:
   en: "%{why} by %{user}"
   ru: "%{why}: %{user}"

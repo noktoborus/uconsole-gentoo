@@ -1,5 +1,5 @@
 [Unit]
-Description=drowse: the stage %i
+Description=drowse: the section %i
 PartOf=drowsed.service
 After=drowsed.service
 
@@ -8,5 +8,5 @@ Type=oneshot
 RemainAfterExit=yes
 TimeoutStartSec=5s
 TimeoutStopSec=5s
-ExecStart=-/usr/bin/drowsed stage action %i
-ExecStop=/usr/bin/drowsed stage resume %i
+ExecStart=-/usr/bin/drowsed stage enter %i
+ExecStop=/usr/bin/drowsed stage leave %i

@@ -52,12 +52,14 @@ fn busy_world(since: u64) -> Snapshot {
 }
 
 /// The times of the tests: one stage a power source, `poweroff`.
-const TIMES: &str =
-    "[IdleBattery]\nIdleTime=15m\nAction=poweroff\n[IdleAC]\nIdleTime=60m\nAction=poweroff\n";
+const TIMES: &str = "\
+main:
+  battery: [{after: 15m, action: poweroff}]
+  ac: [{after: 60m, action: poweroff}]
+";
 
 fn engine(text: &str, power: PowerSource) -> Engine {
-    let (settings, warnings) = settings::parse(text);
-    assert!(warnings.is_empty(), "{warnings:?}");
+    let settings = settings::parse(text).unwrap();
     Engine::new(settings, power, 0, Vec::new()).0
 }
 
@@ -86,27 +88,20 @@ fn has_line(out: &[Command], level: Level, part: &str) -> bool {
 }
 
 const STAGES: &str = "\
-[IdleBattery]
-IdleTime=0
-Countdown=Never
-Action=tuned-adm profile powersave
-ActionHint=power save
-Resume=tuned-adm auto_profile
-
-[IdleBattery-1]
-IdleTime=5m
-Countdown=Never
-Action=nmcli radio all off
-ActionHint=radio off
-Resume=nmcli radio all on
-
-[IdleBattery-2]
-IdleTime=30m
-Countdown=2m
-Action=poweroff
-
-[IdleAC]
-IdleTime=Never
+main:
+  battery:
+    - after: 0
+      enter: tuned-adm profile powersave
+      leave: tuned-adm auto_profile
+      hint: power save
+    - after: 5m
+      enter: nmcli radio all off
+      leave: nmcli radio all on
+      hint: radio off
+    - after: 30m
+      countdown: 2m
+      action: poweroff
+  ac: [{}]
 ";
 
 const POWER_SAVE: &str = "drowsed-stage@battery-0.service";
@@ -133,7 +128,7 @@ fn an_announce_then_power_off() {
 #[test]
 fn the_count_starts_no_sooner_than_the_start() {
     let mut engine = Engine::new(
-        settings::parse(TIMES).0,
+        settings::parse(TIMES).unwrap(),
         PowerSource::Battery,
         mins(100),
         Vec::new(),
@@ -174,7 +169,7 @@ fn a_late_announce_runs_in_full() {
 #[test]
 fn an_action_waits_for_a_fresh_read() {
     let mut engine = engine(
-        "[IdleAC]\nIdleTime=1m\nCountdown=Never\nAction=poweroff\n",
+        "main:\n  ac: [{after: 1m, countdown: never, action: poweroff}]\n",
         PowerSource::Ac,
     );
     engine.on_snapshot(0, idle_world(0));
@@ -185,19 +180,106 @@ fn an_action_waits_for_a_fresh_read() {
 }
 
 #[test]
-fn any_inhibitor_holds_and_its_end_is_activity() {
-    let mut engine = engine(TIMES, PowerSource::Battery);
+fn inhibitors_do_not_count_as_activity_or_hold_the_wrong_section() {
+    let text = "main:\n  battery: [{after: 1m, countdown: never, enter: foo}, {after: 1m, countdown: never, action: suspend}]\n";
+    let mut engine = engine(text, PowerSource::Battery);
     let held = Snapshot {
         sessions: vec![session("1", true, 0)],
         inhibitors: vec![inhibitor("sleep", "block-weak")],
     };
     engine.on_snapshot(0, held);
-    let view = engine.view();
-    assert_eq!(view.state, State::Active);
-    assert_eq!(view.inhibitors.len(), 1);
-    let out = engine.on_snapshot(mins(40), idle_world(0));
-    assert!(has_line(&out, Level::Info, "inhibitors let go"));
-    assert_eq!(engine.next_due(), Some((mins(55), Due::Announce)));
+    assert_eq!(engine.view().state, State::Idle);
+    assert_eq!(engine.view().inhibitors.len(), 0);
+    let out = engine.on_due(mins(1));
+    assert!(jobs(&out).contains(&Job::Start(POWER_SAVE.to_owned())));
+    assert_eq!(engine.view().state, State::Idle);
+}
+
+#[test]
+fn an_idle_inhibitor_holds_a_command_and_release_enters_it() {
+    let text = "main:\n  battery: [{after: 1m, countdown: never, enter: foo}]\n";
+    let mut engine = engine(text, PowerSource::Battery);
+    engine.on_snapshot(
+        0,
+        Snapshot {
+            sessions: vec![session("1", true, 0)],
+            inhibitors: vec![inhibitor("idle", "block-weak")],
+        },
+    );
+    let out = engine.on_due(mins(1));
+    assert!(has_line(&out, Level::Info, "held: foo by drowse-inhibit"));
+    assert!(jobs(&out).is_empty());
+    assert_eq!(engine.view().state, State::Held);
+    assert_eq!(engine.view().scheduled.1, 0);
+    assert_eq!(engine.view().inhibitors.len(), 1);
+    assert_eq!(engine.next_due(), None);
+    let out = engine.on_snapshot(mins(2), idle_world(0));
+    assert!(has_line(&out, Level::Info, "released: foo now"));
+    assert_eq!(jobs(&out), [Job::Start(POWER_SAVE.to_owned())]);
+}
+
+#[test]
+fn shutdown_and_sleep_hold_only_their_logind_actions() {
+    for (kind, action, held) in [
+        ("shutdown", "poweroff", true),
+        ("shutdown", "suspend", false),
+        ("sleep", "poweroff", false),
+        ("sleep", "suspend", true),
+    ] {
+        let text =
+            format!("main:\n  battery: [{{after: 1m, countdown: never, action: {action}}}]\n");
+        let mut engine = engine(&text, PowerSource::Battery);
+        engine.on_snapshot(
+            0,
+            Snapshot {
+                sessions: vec![session("1", true, 0)],
+                inhibitors: vec![inhibitor(kind, "block")],
+            },
+        );
+        let out = engine.on_due(mins(1));
+        assert_eq!(!logind_actions(&out).is_empty(), !held, "{kind} / {action}");
+        assert_eq!(
+            has_line(&out, Level::Info, "held:"),
+            held,
+            "{kind} / {action}"
+        );
+    }
+}
+
+#[test]
+fn an_inhibitor_during_announce_does_not_cancel_it() {
+    let text = "main:\n  battery: [{after: 1m, countdown: 1m, enter: foo}]\n";
+    let mut engine = engine(text, PowerSource::Battery);
+    engine.on_snapshot(0, idle_world(0));
+    engine.on_due(mins(1));
+    let held = Snapshot {
+        sessions: vec![session("1", true, 0)],
+        inhibitors: vec![inhibitor("idle", "block-weak")],
+    };
+    let out = engine.on_snapshot(mins(1) + secs(1), held);
+    assert!(out.is_empty());
+    assert_eq!(engine.view().state, State::Announced);
+    let out = engine.on_due(mins(2));
+    assert!(has_line(&out, Level::Info, "held: foo"));
+    assert_eq!(engine.view().state, State::Announced);
+    let out = engine.on_snapshot(mins(3), idle_world(0));
+    assert!(has_line(&out, Level::Info, "released: foo now"));
+    assert!(jobs(&out).contains(&Job::Start(POWER_SAVE.to_owned())));
+}
+
+#[test]
+fn a_logind_inhibition_waits_for_release() {
+    let text = "main:\n  battery: [{after: 1m, countdown: never, action: poweroff}]\n";
+    let mut engine = engine(text, PowerSource::Battery);
+    engine.on_snapshot(0, idle_world(0));
+    let out = engine.on_due(mins(1));
+    assert_eq!(logind_actions(&out), [LogindAction::Poweroff]);
+    let out = engine.on_action_blocked(mins(1), vec![inhibitor("shutdown", "block-weak")]);
+    assert!(has_line(&out, Level::Info, "held: poweroff"));
+    assert_eq!(engine.next_due(), None);
+    let out = engine.on_snapshot(mins(2), idle_world(0));
+    assert!(has_line(&out, Level::Info, "released: poweroff now"));
+    assert_eq!(logind_actions(&out), [LogindAction::Poweroff]);
 }
 
 #[test]
@@ -249,7 +331,7 @@ fn a_greeter_counts_unless_left_out() {
     by_default.on_snapshot(0, snapshot.clone());
     assert_eq!(by_default.view().state, State::Active);
     let mut no_greeter = engine(
-        "[Sessions]\nClasses=user\n[IdleBattery]\nIdleTime=15m\n",
+        "sessions:\n  classes: [user]\nmain:\n  battery: [{after: 15m}]\n",
         PowerSource::Battery,
     );
     no_greeter.on_snapshot(0, snapshot);
@@ -281,13 +363,13 @@ fn no_session_is_idle() {
 fn never_is_idle_with_no_action() {
     let mut engine = engine(STAGES, PowerSource::Ac);
     let out = engine.on_snapshot(0, idle_world(0));
-    assert!(has_line(&out, Level::Info, "no action"));
+    assert!(has_line(&out, Level::Info, "idle, on AC"));
     assert_eq!(engine.view().state, State::Idle);
     assert_eq!(engine.view().scheduled, (String::new(), 0));
     assert_eq!(engine.next_due(), None);
 }
 
-/// Ends the `Resume` of a unit at `at`, and gives the entry that waited
+/// Ends the `leave` of a unit at `at`, and gives the entry that waited
 /// for it, on a fresh read of an idle world.
 fn resume_ended(engine: &mut Engine, at: u64, unit: &str) -> Vec<Command> {
     engine.on_job_ended(at, unit, true);
@@ -304,7 +386,7 @@ fn the_stages_one_after_another() {
     engine.on_job_ended(secs(1), POWER_SAVE, true);
     let out = engine.on_due(mins(5));
     assert_eq!(jobs(&out), [Job::Stop(POWER_SAVE.to_owned())]);
-    assert_eq!(engine.view().state, State::Announced);
+    assert_eq!(engine.view().state, State::Idle);
     assert_eq!(engine.next_due(), None);
     let out = resume_ended(&mut engine, mins(5) + secs(2), POWER_SAVE);
     assert_eq!(jobs(&out), [Job::Start(RADIO_OFF.to_owned())]);
@@ -372,7 +454,7 @@ fn a_failed_resume_is_a_warning_and_the_entry_comes() {
     engine.on_job_ended(secs(1), POWER_SAVE, true);
     engine.on_due(mins(5));
     let out = engine.on_job_ended(mins(5) + secs(5), POWER_SAVE, false);
-    assert!(has_line(&out, Level::Warning, "the Resume failed"));
+    assert!(has_line(&out, Level::Warning, "the leave failed"));
     let out = engine.on_snapshot(mins(5) + secs(5), idle_world(0));
     assert_eq!(jobs(&out), [Job::Start(RADIO_OFF.to_owned())]);
 }
@@ -392,7 +474,7 @@ fn a_new_count_waits_for_the_resume() {
 
 #[test]
 fn a_stage_with_no_action_runs_its_resume_when_left() {
-    let text = "[IdleBattery]\nIdleTime=0\nCountdown=Never\nResume=foo\n[IdleAC]\nIdleTime=Never\n";
+    let text = "main:\n  battery: [{after: 0, leave: foo}]\n  ac: [{}]\n";
     let mut engine = engine(text, PowerSource::Battery);
     let out = engine.on_snapshot(0, idle_world(0));
     assert_eq!(jobs(&out), [Job::Start(POWER_SAVE.to_owned())]);
@@ -403,7 +485,7 @@ fn a_stage_with_no_action_runs_its_resume_when_left() {
 
 #[test]
 fn a_stage_with_nothing_is_an_entry_that_does_nothing() {
-    let text = "[IdleBattery]\nIdleTime=0\nCountdown=Never\n[IdleBattery-1]\nIdleTime=1m\nCountdown=Never\nAction=poweroff\n[IdleAC]\nIdleTime=Never\n";
+    let text = "main:\n  battery: [{after: 0}, {after: 1m, countdown: never, action: poweroff}]\n  ac: [{}]\n";
     let mut engine = engine(text, PowerSource::Battery);
     let out = engine.on_snapshot(0, idle_world(0));
     assert!(jobs(&out).is_empty());
@@ -480,7 +562,7 @@ fn a_failed_command_is_a_warning_and_the_stages_go_on() {
     let mut engine = engine(STAGES, PowerSource::Battery);
     engine.on_snapshot(0, idle_world(0));
     let out = engine.on_job_ended(secs(5), POWER_SAVE, false);
-    assert!(has_line(&out, Level::Warning, "no Resume"));
+    assert!(has_line(&out, Level::Warning, "no leave"));
     assert_eq!(engine.view().scheduled, ("radio off".to_owned(), mins(5)));
 }
 

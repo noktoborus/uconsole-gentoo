@@ -9,7 +9,7 @@ use zbus::{Guid, OwnedVariant};
 
 use super::*;
 use crate::engine::State;
-use crate::world::SessionState;
+use crate::world::{Inhibitor, SessionState};
 
 fn view(state: State, power: PowerSource) -> View {
     View {
@@ -79,6 +79,33 @@ async fn the_properties_and_their_signatures() {
     assert_eq!(
         all["HeldByInhibitors"].value_signature().to_string(),
         "a(ssssuu)"
+    );
+}
+
+#[tokio::test]
+async fn held_state_and_inhibitors_are_published() {
+    let (server, client) = pair().await;
+    let mut held_view = view(State::Held, PowerSource::Battery);
+    held_view.scheduled = ("power save".to_owned(), 0);
+    held_view.inhibitors.push(Inhibitor {
+        what: "idle".to_owned(),
+        who: "drowse-inhibit".to_owned(),
+        why: "build".to_owned(),
+        mode: "block-weak".to_owned(),
+        uid: 1000,
+        pid: 42,
+    });
+    serve(&server, &held_view).await.unwrap();
+    let state = properties(&client, PATH).await;
+    let all = state.get_all(interface()).await.unwrap();
+    assert_eq!(String::try_from(all["State"].clone()).unwrap(), "held");
+    let held = properties(&client, HELD_PATH).await;
+    let all = held.get_all(interface()).await.unwrap();
+    assert_eq!(
+        Vec::<InhibitorRow>::try_from(all["HeldByInhibitors"].clone())
+            .unwrap()
+            .len(),
+        1
     );
 }
 

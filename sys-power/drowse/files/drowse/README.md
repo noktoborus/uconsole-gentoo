@@ -1,9 +1,9 @@
 # drowse
 
 `drowsed`: a system service of systemd. While every session is idle it
-does the actions of its stages, one after another: a command (and its
-undo when the user comes back), an action of power (suspend, hibernate,
-power off). The stages are set for the battery and for AC. It warns
+enters its sections, one after another: a command (and its undo when the
+user comes back), an action of power (suspend, hibernate, power off).
+The chains are set for the battery and for AC. It warns
 before an action, and any activity cancels it. What it does is in
 REQUIREMENTS.md.
 
@@ -26,8 +26,8 @@ Other lines of swayidle (the screen off, the lock) are as you like.
 A login screen (a session of class `greeter`) counts, as for logind. If
 it sets no idle hint, it is never idle, and the system stays up while it
 is shown. Run swayidle with `idlehint` in its sway, or leave `greeter`
-out of `Classes=` of `[Sessions]`: then with nobody logged in the system
-is idle.
+out of `sessions.classes` in `/etc/drowse.yaml`: then with nobody logged
+in the system is idle.
 
 ### logind: IdleAction=ignore
 
@@ -53,9 +53,9 @@ not one of mode `block`.
 
 ### The action
 
-With no `/etc/drowse.conf` the service does nothing: the default
-`IdleTime` is `Never`. The file as the package gives it stays in
-`/usr/share/drowse/drowse.conf`, to compare with or to take again. The file of the package sets, on battery, the
+With no chains in `/etc/drowse.yaml` the service does nothing. The file
+as the package gives it stays in `/usr/share/drowse/drowse.yaml`, to
+compare with or to take again. The file of the package sets, on battery, the
 power save at 10 min of idle and `poweroff` at 50 min; on AC nothing.
 
 The power save is the profile of TuneD `cm5-powersave`, for the BCM2712
@@ -80,16 +80,23 @@ The power save is the profile of TuneD `cm5-powersave`, for the BCM2712
 A deeper step of the power save is the profile
 `cm5-powersave-no-radio`: `cm5-powersave`, and every radio off by its
 soft block of rfkill (`rfkill-off.sh`: Wi-Fi, Bluetooth, a modem). A
-radio that was off before stays off when the profile ends. Set it by a
-stage of its own, after that of `cm5-powersave`:
+radio that was off before stays off when the profile ends. Set it in the
+next section of `main.battery`, after the one for `cm5-powersave`:
 
-```
-[IdleBattery-1]
-IdleTime=10m
-Countdown=Never
-Action=tuned-adm profile cm5-powersave-no-radio
-ActionHint=radio off
-Resume=systemctl try-restart tuned-ppd.service
+```yaml
+main:
+  battery:
+    - after: 10m
+      enter: tuned-adm profile cm5-powersave
+      leave: systemctl try-restart tuned-ppd.service
+      hint: power save
+    - after: 10m
+      enter: tuned-adm profile cm5-powersave-no-radio
+      leave: systemctl try-restart tuned-ppd.service
+      hint: radio off
+    - after: 28m
+      countdown: 2m
+      action: poweroff
 ```
 
 TuneD writes every value before back when the profile ends. The package
@@ -107,41 +114,41 @@ With no such profile the power save fails, and the `poweroff` still
 comes. It needs:
 
 - tuned with tuned-ppd. tuned-ppd keeps the profile the user chose, and
-  `systemctl try-restart tuned-ppd.service` (the `Resume`) sets it
-  again. With tuned and no tuned-ppd, set `Resume=tuned-adm profile
+  `systemctl try-restart tuned-ppd.service` (`leave`) sets it again.
+  With tuned and no tuned-ppd, set `leave: tuned-adm profile
   <the profile>`. With no tuned the power save fails, and the `poweroff`
   still comes.
 - `arm_freq_min=800` or lower in `config.txt`. cpufreq keeps the limit
   inside the range of the firmware, and the default lowest of the CM5 is
   1500 MHz.
 
-A stage has no default action: write `Action=` to have one. One stage
-is entered at a time: before the next stage is entered, the one before
-is left, and its `Resume` runs and is waited for; on activity the stage
-entered is left. An `Action` that fails has no `Resume`.
+A command section has no default command: set `enter:` to run one. One
+section is entered at a time: before the next section is entered, the
+one before is left, and its `leave` runs and is waited for; on activity
+the section entered is left. A failed `enter` has no `leave`.
 
 `poweroff` works on any device. A sleep needs
 the kernel and the system set up for it (`CONFIG_SUSPEND`, a place to
 resume from for `hibernate`); the uConsole with a CM5 has no suspend.
-To sleep, set `Action=suspend` in `/etc/drowse.conf`, in the section of
-the power source.
+To sleep, set `action: suspend` in the last section of the power chain
+in `/etc/drowse.yaml`.
 
-### The commands of the stages: short
+### The commands of the sections: short
 
-A command of a stage (`Action`, `Resume`) has 5 s to run; past it
-systemd kills it, and a killed `Action` has no `Resume`. A long task
-does not belong in a stage: start it from a unit or a timer of its own.
+A command section (`enter`, `leave`) has 5 s to run; past it systemd
+kills it, and a killed `enter` has no `leave`. A long task
+does not belong in a section: start it from a unit or a timer of its own.
 
 ### A limit: nothing goes through a sleep
 
 systemd stops drowsed before a sleep and starts it after the wake; a
-start is a new count from the first stage. So a stage after a sleep
-does not come: `[IdleBattery] Action=suspend` and then
-`[IdleBattery-1] Action=poweroff` never powers off, the second stage is
-never reached.
+start is a new count from the first section. So a section after a sleep
+does not come: a chain with `action: suspend` and then
+`action: poweroff` never powers off, the second section is never
+reached.
 
 To sleep and then hibernate after a time, use the action of logind
-`Action=suspend-then-hibernate`, with `HibernateDelaySec=` in
+`action: suspend-then-hibernate`, with `HibernateDelaySec=` in
 `/etc/systemd/sleep.conf`: systemd wakes the system for it. It needs a
 place to resume from. A sleep, then a power off, is not done.
 
@@ -247,6 +254,7 @@ The module, as the file has it:
     "format-icons": {
         "unknown": "?",
         "announced": "⏰",
+        "held": "🔒",
         "own": "☕",
         "other": "🔒",
         "session-other": "👤",
@@ -264,6 +272,7 @@ With a Nerd Font, the glyphs of Material Design (`unknown` nf-md-help, `announce
     "format-icons": {
         "unknown": "󰋖",
         "announced": "󰀠",
+        "held": "󰌾",
         "own": "󰅶",
         "other": "󰌾",
         "session-other": "󰀄",
@@ -273,7 +282,7 @@ With a Nerd Font, the glyphs of Material Design (`unknown` nf-md-help, `announce
     },
 ```
 
-The classes of the module: the state (`active`, `idle`, `announced`,
+The classes of the module: the state (`active`, `idle`, `announced`, `held`,
 `unknown`), what holds the system (`own`, `other`, `session-other`,
 `session-own`, `none`, `hidden`) and the power (`battery`, `ac`).
 

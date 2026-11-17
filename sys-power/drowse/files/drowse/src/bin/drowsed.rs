@@ -1,6 +1,6 @@
-//! drowsed: the system service that does the actions of its stages while
-//! every session is idle. `drowsed stage action|resume <instance>` is the
-//! command of a unit of a stage.
+//! drowsed: the system service that enters its sections while
+//! every session is idle. `drowsed stage enter|leave <instance>` is the
+//! command of a unit of a section.
 
 use std::process::ExitCode;
 
@@ -42,7 +42,7 @@ fn serve() -> ExitCode {
     }
 }
 
-/// Runs the command of a stage in place of this process.
+/// Runs the command of a section in place of this process.
 fn run_stage(instance: &str, part: Part) -> ExitCode {
     match stage::exec(instance, part) {
         Ok(()) => ExitCode::SUCCESS,
@@ -56,6 +56,6 @@ fn run_stage(instance: &str, part: Part) -> ExitCode {
 /// Says how to call the program.
 fn usage() -> ExitCode {
     eprintln!("usage: drowsed");
-    eprintln!("       drowsed stage action|resume <battery-N|ac-N>");
+    eprintln!("       drowsed stage enter|leave <battery-N|ac-N>");
     ExitCode::from(USAGE)
 }

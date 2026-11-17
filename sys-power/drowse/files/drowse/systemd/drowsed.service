@@ -1,5 +1,5 @@
 [Unit]
-Description=drowse: the stages of actions while the system is idle
+Description=drowse: the action chains while the system is idle
 Wants=systemd-logind.service upower.service
 After=systemd-logind.service upower.service
 PartOf=systemd-logind.service

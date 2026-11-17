@@ -1,43 +1,43 @@
-//! `drowsed stage action|resume <instance>`: the command a unit of a stage
-//! runs. It reads the line of the stage from the settings file and puts
-//! the command in its place by `exec`, with no shell.
+//! `drowsed stage enter|leave <instance>`: the command a unit of a section
+//! runs. It reads the command from the settings file and replaces itself
+//! by `exec`, with no shell.
 
 use std::fmt;
 use std::os::unix::process::CommandExt;
 use std::path::Path;
 
-use crate::settings::{self, Action, Command, Power};
+use crate::settings::{self, Command, Power, SectionKind};
 
-/// What a unit of a stage runs.
+/// What a unit of a section runs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Part {
-    /// `Action` of the stage, at the start of the unit.
-    Action,
-    /// `Resume` of the stage, at the stop of the unit.
-    Resume,
+    /// `enter` of the section, at the start of the unit.
+    Enter,
+    /// `leave` of the section, at the stop of the unit.
+    Leave,
 }
 
 impl Part {
-    /// Reads `action` or `resume`.
+    /// Reads `enter` or `leave`.
     pub fn from_name(name: &str) -> Option<Self> {
         match name {
-            "action" => Some(Self::Action),
-            "resume" => Some(Self::Resume),
+            "enter" => Some(Self::Enter),
+            "leave" => Some(Self::Leave),
             _ => None,
         }
     }
 }
 
-/// Why a stage cannot run its command.
+/// Why a section cannot run its command.
 #[derive(Debug)]
 pub enum StageError {
     /// The instance is not `battery-<n>` or `ac-<n>`.
     Instance(String),
     /// The settings file cannot be read.
     Settings(crate::Error),
-    /// No such stage in the settings.
+    /// No such section in the settings.
     NoStage(String),
-    /// The action of the stage is of logind, not a command.
+    /// The section is a logind action, not a command.
     NotACommand(String),
     /// The command cannot be put in place.
     Exec {
@@ -53,10 +53,10 @@ impl fmt::Display for StageError {
         match self {
             Self::Instance(instance) => write!(
                 f,
-                "{instance}: not an instance of a stage (battery-<n>, ac-<n>)"
+                "{instance}: not an instance of a section (battery-<n>, ac-<n>)"
             ),
             Self::Settings(_) => f.write_str("cannot read the settings"),
-            Self::NoStage(instance) => write!(f, "{instance}: no such stage in the settings"),
+            Self::NoStage(instance) => write!(f, "{instance}: no such section in the settings"),
             Self::NotACommand(instance) => {
                 write!(f, "{instance}: the action is of logind, not a command")
             }
@@ -75,7 +75,7 @@ impl std::error::Error for StageError {
     }
 }
 
-/// Reads an instance: its power source and the number of its stage.
+/// Reads an instance: its power source and the number of its section.
 pub fn parse_instance(instance: &str) -> Option<(Power, usize)> {
     let (power, number) = instance.rsplit_once('-')?;
     if number.is_empty() || !number.bytes().all(|b| b.is_ascii_digit()) {
@@ -87,7 +87,7 @@ pub fn parse_instance(instance: &str) -> Option<(Power, usize)> {
     Some((power, number.parse().ok()?))
 }
 
-/// The command of a part of a stage, if it has one. `None`: nothing to run.
+/// The command of a part of a section, if it has one. `None`: nothing to run.
 pub fn command_of(
     settings: &settings::Settings,
     instance: &str,
@@ -95,24 +95,26 @@ pub fn command_of(
 ) -> Result<Option<Command>, StageError> {
     let (power, number) =
         parse_instance(instance).ok_or_else(|| StageError::Instance(instance.to_owned()))?;
-    let stage = settings
-        .stages(power)
+    let section = settings
+        .sections(power)
         .get(number)
         .ok_or_else(|| StageError::NoStage(instance.to_owned()))?;
     match part {
-        Part::Action => match &stage.action {
-            Some(Action::Command(command)) => Ok(Some(command.clone())),
-            Some(Action::Logind(_)) => Err(StageError::NotACommand(instance.to_owned())),
-            None => Ok(None),
+        Part::Enter => match &section.kind {
+            SectionKind::Command { enter, .. } => Ok(enter.clone()),
+            SectionKind::Action(_) => Err(StageError::NotACommand(instance.to_owned())),
         },
-        Part::Resume => Ok(stage.resume.clone()),
+        Part::Leave => match &section.kind {
+            SectionKind::Command { leave, .. } => Ok(leave.clone()),
+            SectionKind::Action(_) => Err(StageError::NotACommand(instance.to_owned())),
+        },
     }
 }
 
-/// Puts the command of a part of a stage in place of this process. It
+/// Puts the command of a part of a section in place of this process. It
 /// returns only when there is nothing to run (`Ok`) or on an error.
 pub fn exec(instance: &str, part: Part) -> Result<(), StageError> {
-    let (settings, _) = settings::load(Path::new(settings::PATH)).map_err(StageError::Settings)?;
+    let settings = settings::load(Path::new(settings::PATH)).map_err(StageError::Settings)?;
     let Some(command) = command_of(&settings, instance, part)? else {
         return Ok(());
     };
@@ -132,17 +134,14 @@ mod tests {
     use super::*;
 
     const TEXT: &str = "\
-[IdleBattery]
-IdleTime=0
-Countdown=Never
-Action=tuned-adm profile powersave
-Resume=tuned-adm auto_profile
-
-[IdleBattery-1]
-Action=poweroff
-
-[IdleAC]
-Action=nmcli radio all off
+main:
+  battery:
+    - after: 0
+      enter: tuned-adm profile powersave
+      leave: tuned-adm auto_profile
+    - action: poweroff
+  ac:
+    - enter: nmcli radio all off
 ";
 
     #[test]
@@ -156,26 +155,26 @@ Action=nmcli radio all off
 
     #[test]
     fn the_parts_of_a_stage() {
-        let (settings, _) = settings::parse(TEXT);
-        let action = command_of(&settings, "battery-0", Part::Action)
+        let settings = settings::parse(TEXT).unwrap();
+        let action = command_of(&settings, "battery-0", Part::Enter)
             .unwrap()
             .unwrap();
         assert_eq!(action.words(), ["tuned-adm", "profile", "powersave"]);
-        let resume = command_of(&settings, "battery-0", Part::Resume)
+        let resume = command_of(&settings, "battery-0", Part::Leave)
             .unwrap()
             .unwrap();
         assert_eq!(resume.words(), ["tuned-adm", "auto_profile"]);
         assert!(
-            command_of(&settings, "ac-0", Part::Resume)
+            command_of(&settings, "ac-0", Part::Leave)
                 .unwrap()
                 .is_none()
         );
         assert!(matches!(
-            command_of(&settings, "battery-1", Part::Action),
+            command_of(&settings, "battery-1", Part::Enter),
             Err(StageError::NotACommand(_))
         ));
         assert!(matches!(
-            command_of(&settings, "ac-3", Part::Action),
+            command_of(&settings, "ac-3", Part::Enter),
             Err(StageError::NoStage(_))
         ));
     }
