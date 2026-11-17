@@ -241,8 +241,9 @@ the power inhibitors; it does not touch one of
 only, in the middle of a width that does not change; the time left and
 what holds the system are in the tooltip.
 
-The package puts the module in `/etc/xdg/waybar/drowse.jsonc` and its
-colours in `/etc/xdg/waybar/drowse.css`. In the config of waybar:
+With Waybar support enabled, the package puts the module in
+`/etc/xdg/waybar/drowse.jsonc` and its colours in
+`/etc/xdg/waybar/drowse.css`. In the config of waybar:
 
 ```jsonc
 "include": ["/etc/xdg/waybar/drowse.jsonc"],

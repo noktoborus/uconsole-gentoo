@@ -1,10 +1,10 @@
 # drowse: while every session of logind is idle, drowsed does the actions
 # of its stages (a command and its undo, an action of power); its state
 # is on the system bus. drowse-inhibit holds the system by hand,
-# drowse-status shows the state, for waybar too: /etc/xdg/waybar has its
-# module. /etc/drowse.yaml has the settings. The service, the restart
-# on a change of /etc/drowse.yaml and the start after a sleep are
-# enabled by a preset.
+# drowse-status shows the state, for waybar too. With USE=waybar the
+# module files go to /etc/xdg/waybar. /etc/drowse.yaml has the settings.
+# The preset enables the service, its config watcher and its start after
+# sleep.
 #
 # The source is a copy of drowse in files/drowse, with the sum below;
 # CRATES is its Cargo.lock. The modes of files/ are not kept.
@@ -156,17 +156,18 @@ LICENSE="MIT"
 LICENSE+=" BSD LGPL-2.1+ MIT Unicode-3.0 ZLIB"
 SLOT="0"
 KEYWORDS="arm64"
-IUSE="cm5-tuned"
+IUSE="cm5-tuned waybar"
 
 DEPEND="sys-apps/systemd"
 RDEPEND="
 	${DEPEND}
 	sys-apps/dbus
 	cm5-tuned? ( sys-apps/tuned )
+	waybar? ( gui-apps/waybar )
 "
 BDEPEND="virtual/pkgconfig"
 
-# files/ sha256: 9c71abc2a59962108118f434f8f2d53b55728b67b95cf76c9781cd776fd16eb0
+# files/ sha256: 57b6b6e807ba27ca9afae72c5af94ded374c39159904d309aa351f8e42eb84c2
 
 src_unpack() {
 	cargo_src_unpack
@@ -188,8 +189,10 @@ src_install() {
 	# /etc/drowse.yaml is changed by the user.
 	insinto /usr/share/drowse
 	doins etc/drowse.yaml
-	insinto /etc/xdg/waybar
-	doins waybar/drowse.jsonc waybar/drowse.css
+	if use waybar; then
+		insinto /etc/xdg/waybar
+		doins waybar/drowse.jsonc waybar/drowse.css
+	fi
 	dodoc README.md
 	# The profile of TuneD is an example the user copies by hand; kept
 	# whole, not compressed.
