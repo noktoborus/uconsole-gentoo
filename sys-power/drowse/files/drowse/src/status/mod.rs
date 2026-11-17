@@ -41,6 +41,8 @@ pub struct Observed {
     pub sessions: Option<Vec<SessionRow>>,
     /// The inhibitors of logind that hold the system up.
     pub inhibitors: Vec<Inhibitor>,
+    /// The inhibitors that hold the due entry.
+    pub held_inhibitors: Vec<Inhibitor>,
     /// The uid of the user of the tool.
     pub uid: u32,
 }
@@ -68,10 +70,16 @@ impl Observed {
     }
 
     /// Whether an inhibitor of the tool of this user or of root holds.
-    fn own_held(&self) -> bool {
-        self.inhibitors
-            .iter()
-            .any(|inhibitor| self.is_own_inhibitor(inhibitor))
+    fn own_kinds(&self) -> (bool, bool) {
+        let mut idle = false;
+        let mut power = false;
+        for inhibitor in self.inhibitors.iter().filter(|i| self.is_own_inhibitor(i)) {
+            for kind in inhibitor.what.split(':') {
+                idle |= kind == "idle";
+                power |= kind == "sleep" || kind == "shutdown";
+            }
+        }
+        (idle, power)
     }
 
     /// Whether an inhibitor of another holds.
@@ -81,11 +89,14 @@ impl Observed {
             .any(|inhibitor| !self.is_own_inhibitor(inhibitor))
     }
 
-    /// The hold: `own`, `other`, `session-other`, `session-own`, `none`,
+    /// The hold: `own-all`, `own-power`, `own-idle`, `other`, `session-other`, `session-own`, `none`,
     /// `hidden`.
     fn hold(&self) -> &'static str {
-        if self.own_held() {
-            return "own";
+        match self.own_kinds() {
+            (true, true) => return "own-all",
+            (true, false) => return "own-idle",
+            (false, true) => return "own-power",
+            (false, false) => {}
         }
         if self.other_held() {
             return "other";
@@ -121,7 +132,9 @@ pub fn show(observed: &Observed, now: u64, user_of: &dyn Fn(u32) -> String) -> S
     let alt = match (state, hold) {
         ("held", _) => "held",
         ("announced", _) => "announced",
-        (_, "own") => "own",
+        (_, "own-all") => "own-all",
+        (_, "own-power") => "own-power",
+        (_, "own-idle") => "own-idle",
         (_, "other") => "other",
         (_, "session-other") => "session-other",
         ("idle", _) => "idle",
@@ -146,7 +159,7 @@ pub fn show(observed: &Observed, now: u64, user_of: &dyn Fn(u32) -> String) -> S
             vec![t!("status.planned", action = action, left = time_left(left)).into_owned()]
         }
         ("idle", None) => vec![t!("status.idle_nothing").into_owned()],
-        ("announced", None) if !observed.inhibitors.is_empty() => {
+        ("announced", None) if !observed.held_inhibitors.is_empty() => {
             held_tooltip(observed, action, user_of)
         }
         ("announced", None) => vec![t!("status.idle").into_owned()],
@@ -164,7 +177,12 @@ pub fn show(observed: &Observed, now: u64, user_of: &dyn Fn(u32) -> String) -> S
 
 fn held_tooltip(observed: &Observed, action: &str, user_of: &dyn Fn(u32) -> String) -> Vec<String> {
     let mut lines = vec![t!("status.held", action = action).into_owned()];
-    lines.extend(holders(observed, user_of).into_iter().skip(1));
+    lines.extend(
+        observed
+            .held_inhibitors
+            .iter()
+            .map(|inhibitor| format!(" - {}", inhibitor_line(inhibitor, user_of))),
+    );
     lines
 }
 
@@ -211,12 +229,21 @@ fn inhibitor_line(inhibitor: &Inhibitor, user_of: &dyn Fn(u32) -> String) -> Str
     } else {
         &inhibitor.why
     };
-    t!(
+    let line = t!(
         "status.inhibitor",
         why = cut(why),
         user = user_of(inhibitor.uid)
     )
-    .into_owned()
+    .into_owned();
+    if is_own(&inhibitor.who) {
+        let kind = if inhibitor.what.split(':').any(|item| item == "idle") {
+            t!("status.kind_idle").into_owned()
+        } else {
+            t!("status.kind_power").into_owned()
+        };
+        return t!("status.own_inhibitor", kind = kind, why = line).into_owned();
+    }
+    line
 }
 
 /// A text cut to `WHY_MAX` characters, with `…`.

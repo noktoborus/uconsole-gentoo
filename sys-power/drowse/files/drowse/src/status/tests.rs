@@ -40,6 +40,7 @@ fn observed(state: Option<ServiceState>) -> Observed {
         service: state,
         sessions: Some(Vec::new()),
         inhibitors: Vec::new(),
+        held_inhibitors: Vec::new(),
         uid: 1000,
     }
 }
@@ -131,15 +132,16 @@ fn held_entry_shows_what_waits_and_what_holds_it() {
     let mut seen = observed(Some(service("held", 0)));
     seen.service.as_mut().unwrap().scheduled.0 = "power save".to_owned();
     seen.inhibitors = vec![inhibitor("drowse-inhibit", "build", 1000)];
+    seen.held_inhibitors = seen.inhibitors.clone();
     let shown = show(&seen, 0, &name);
     assert_eq!(shown.text, "");
     assert_eq!(shown.alt, "held");
-    assert_eq!(shown.class, ["held", "own", "battery"]);
+    assert_eq!(shown.class, ["held", "own-power", "battery"]);
     assert_eq!(
         shown.tooltip,
         [
             "waiting to enter power save, held by:",
-            " - build by alice",
+            " - power: build by alice",
             "On battery"
         ]
     );
@@ -151,6 +153,7 @@ fn announced_entry_keeps_its_state_while_held() {
     let mut seen = observed(Some(service("announced", 0)));
     seen.service.as_mut().unwrap().scheduled.0 = "poweroff".to_owned();
     seen.inhibitors = vec![inhibitor("drowse-inhibit", "build", 1000)];
+    seen.held_inhibitors = seen.inhibitors.clone();
     let shown = show(&seen, 0, &name);
     assert_eq!(shown.alt, "announced");
     assert_eq!(shown.class[0], "announced");
@@ -186,13 +189,13 @@ fn the_holds() {
     let _language = english();
     let mut seen = observed(Some(service("active", 0)));
     seen.inhibitors = vec![inhibitor(WHO, "emerge", 1000), inhibitor("x", "y", 1001)];
-    assert_eq!(show(&seen, 0, &name).alt, "own");
+    assert_eq!(show(&seen, 0, &name).alt, "own-power");
     seen.inhibitors = vec![inhibitor("until emerge -uDN @world", "", 1000)];
-    assert_eq!(show(&seen, 0, &name).alt, "own");
+    assert_eq!(show(&seen, 0, &name).alt, "own-power");
     seen.inhibitors = vec![inhibitor("until make", "", 1001)];
     assert_eq!(show(&seen, 0, &name).alt, "other");
     seen.inhibitors = vec![inhibitor("until emerge -uDN @world", "emerge", 0)];
-    assert_eq!(show(&seen, 0, &name).alt, "own");
+    assert_eq!(show(&seen, 0, &name).alt, "own-power");
     seen.inhibitors = vec![inhibitor("x", "y", 0)];
     assert_eq!(show(&seen, 0, &name).alt, "other");
     seen.inhibitors.clear();
@@ -212,6 +215,19 @@ fn the_holds() {
 }
 
 #[test]
+fn own_idle_power_and_all_have_distinct_classes() {
+    let _language = english();
+    let mut seen = observed(Some(service("idle", 0)));
+    let mut idle = inhibitor(WHO, "build", 1000);
+    idle.what = "idle".to_owned();
+    seen.inhibitors = vec![idle.clone()];
+    assert_eq!(show(&seen, 0, &name).alt, "own-idle");
+    seen.inhibitors.push(inhibitor(WHO, "download", 1000));
+    assert_eq!(show(&seen, 0, &name).alt, "own-all");
+    assert_eq!(inhibitor_line(&idle, &name), "idle: build by alice");
+}
+
+#[test]
 fn a_long_why_is_cut_and_no_why_is_who() {
     let _language = english();
     let long = "a".repeat(50);
@@ -221,11 +237,11 @@ fn a_long_why_is_cut_and_no_why_is_who() {
     );
     assert_eq!(
         inhibitor_line(&inhibitor("drowse-inhibit", "", 1000), &name),
-        "drowse-inhibit by alice"
+        "power: drowse-inhibit by alice"
     );
     assert_eq!(
         inhibitor_line(&inhibitor("until make -j4", "held by hand", 1000), &name),
-        "until make -j4 by alice"
+        "power: until make -j4 by alice"
     );
 }
 

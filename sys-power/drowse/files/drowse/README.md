@@ -167,7 +167,9 @@ system up. Hold it by an inhibitor: `drowse-inhibit on`, or
 
 ### drowse-inhibit and polkit
 
-`drowse-inhibit` takes an inhibitor of `sleep:shutdown` from logind. In a
+`drowse-inhibit` holds command sections with `idle` by default. The flags
+`--power` holds logind sleep and shutdown actions; `--all` holds both.
+In a
 local session polkit gives it with no password. From ssh polkit asks the
 password of an admin. On a terminal the tool runs `pkttyagent` (of
 polkit), and the password is typed there. With no `pkttyagent`, or with
@@ -181,6 +183,18 @@ Hold the system up while the command runs:
 ```
 drowse-inhibit -- emerge -uDN @world
 ```
+
+Use `--power` to hold only logind actions, or `--all` for both. Separate
+holds let a due action run in the gap between commands. One shell command
+can hold the whole sequence:
+
+```
+drowse-inhibit --all -- sh -c 'first; second'
+```
+
+Use `on`, `off` and `toggle` with the same flags. The waybar click uses
+`drowse-inhibit cycle`: none, power, both, none. The default is `--idle`
+so a build can keep full CPU speed while still allowing screen blanking.
 
 The inhibitor ends with the command; its exit code is that of the
 command. As root (`sudo drowse-inhibit -- emerge ...`) the inhibitor is
@@ -220,8 +234,8 @@ it was taken; with `no` it outlives the logout.
 ## The state in waybar
 
 `drowse-status --waybar --follow` writes one line of JSON at each change,
-and as the time left runs; waybar needs no `interval`. A click takes or
-lets go the inhibitor of `drowse-inhibit on`; it does not touch one of
+and as the time left runs; waybar needs no `interval`. A click cycles
+the power inhibitors; it does not touch one of
 `drowse-inhibit -- <command>`, which the tooltip shows as
 `until <command>`. The module shows the icon
 only, in the middle of a width that does not change; the time left and
@@ -255,25 +269,29 @@ The module, as the file has it:
         "unknown": "?",
         "announced": "⏰",
         "held": "🔒",
-        "own": "☕",
+        "own-all": "☕",
+        "own-power": "🔒",
+        "own-idle": "🛠",
         "other": "🔒",
         "session-other": "👤",
         "idle": "🌙",
         "session-own": "🖥",
         "active": ""
     },
-    "on-click": "drowse-inhibit toggle"
+    "on-click": "drowse-inhibit cycle"
 }
 ```
 
-With a Nerd Font, the glyphs of Material Design (`unknown` nf-md-help, `announced` nf-md-alarm, `own` nf-md-coffee, `other` nf-md-lock, `session-other` nf-md-account, `idle` nf-md-sleep, `session-own` nf-md-monitor):
+With a Nerd Font, the glyphs of Material Design (`unknown` nf-md-help, `announced` nf-md-alarm, `own-all` nf-md-coffee, `own-power` nf-md-lock, `own-idle` nf-md-cog, `other` nf-md-lock, `session-other` nf-md-account, `idle` nf-md-sleep, `session-own` nf-md-monitor):
 
 ```json
     "format-icons": {
         "unknown": "󰋖",
         "announced": "󰀠",
         "held": "󰌾",
-        "own": "󰅶",
+        "own-all": "󰅶",
+        "own-power": "󰌾",
+        "own-idle": "󰒓",
         "other": "󰌾",
         "session-other": "󰀄",
         "idle": "󰒲",
@@ -283,7 +301,7 @@ With a Nerd Font, the glyphs of Material Design (`unknown` nf-md-help, `announce
 ```
 
 The classes of the module: the state (`active`, `idle`, `announced`, `held`,
-`unknown`), what holds the system (`own`, `other`, `session-other`,
+`unknown`), what holds the system (`own-all`, `own-power`, `own-idle`, `other`, `session-other`,
 `session-own`, `none`, `hidden`) and the power (`battery`, `ac`).
 
 ```css

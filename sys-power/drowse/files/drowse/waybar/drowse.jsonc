@@ -18,13 +18,15 @@
             "unknown": "?",
             "announced": "⏰",
             "held": "🔒",
-            "own": "☕",
+            "own-all": "☕",
+            "own-power": "🔒",
+            "own-idle": "🛠",
             "other": "🔒",
             "session-other": "👤",
             "idle": "🌙",
             "session-own": "🖥",
             "active": ""
         },
-        "on-click": "drowse-inhibit toggle"
+        "on-click": "drowse-inhibit cycle"
     }
 }

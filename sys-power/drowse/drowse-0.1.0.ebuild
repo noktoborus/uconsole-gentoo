@@ -166,7 +166,7 @@ RDEPEND="
 "
 BDEPEND="virtual/pkgconfig"
 
-# files/ sha256: 75b000594b0e39dcc94292898e65ac70e2b5db5aff29329b14ddb5902c6742a8
+# files/ sha256: 9c71abc2a59962108118f434f8f2d53b55728b67b95cf76c9781cd776fd16eb0
 
 src_unpack() {
 	cargo_src_unpack

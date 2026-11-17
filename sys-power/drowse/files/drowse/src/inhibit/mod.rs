@@ -30,9 +30,27 @@ pub const WHO: &str = "drowse-inhibit";
 /// follows.
 pub const UNTIL: &str = "until ";
 
-/// The kinds the inhibitor holds: not `idle`, so the screen still goes
-/// off and the lock still comes.
-const WHAT: &str = "sleep:shutdown";
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// The kinds of work an inhibitor holds.
+pub enum Kind {
+    /// Hold command sections.
+    Idle,
+    /// Hold logind sleep and shutdown actions.
+    Power,
+    /// Hold both kinds.
+    All,
+}
+
+impl Kind {
+    /// The inhibitors to take for this kind.
+    pub fn whats(self) -> &'static [&'static str] {
+        match self {
+            Self::Idle => &["idle"],
+            Self::Power => &["sleep:shutdown"],
+            Self::All => &["idle", "sleep:shutdown"],
+        }
+    }
+}
 
 /// The mode: the service keeps to it; a power off by hand passes it.
 const MODE: &str = "block-weak";
@@ -83,11 +101,11 @@ async fn logind() -> Result<ManagerProxy<'static>> {
 
 /// Takes an inhibitor of logind for this process. With a terminal, the
 /// password polkit asks for is typed there.
-async fn take(who: &str, why: &str) -> Result<OwnedFd> {
+pub(crate) async fn take(who: &str, why: &str, what: &str) -> Result<OwnedFd> {
     let logind = logind().await?;
     let agent = agent::Agent::start_on_terminal()?;
     let fd = logind
-        .inhibit(WHAT, who, why, MODE)
+        .inhibit(what, who, why, MODE)
         .await
         .map_err(|source| Error::Bus {
             what: "take an inhibitor of logind",
@@ -98,7 +116,7 @@ async fn take(who: &str, why: &str) -> Result<OwnedFd> {
 }
 
 /// The pids of the inhibitors of `on` of this user.
-async fn own_pids(logind: &ManagerProxy<'static>) -> Result<Vec<u32>> {
+async fn own_pids(logind: &ManagerProxy<'static>, kind: Kind) -> Result<Vec<u32>> {
     let uid = getuid().as_raw();
     let rows = logind
         .list_inhibitors()
@@ -109,7 +127,9 @@ async fn own_pids(logind: &ManagerProxy<'static>) -> Result<Vec<u32>> {
         })?;
     Ok(rows
         .into_iter()
-        .filter(|(_, who, _, _, owner, _)| who == WHO && *owner == uid)
+        .filter(|(what, who, _, _, owner, _)| {
+            who == WHO && *owner == uid && matches_kind(what, kind)
+        })
         .map(|(_, _, _, _, _, pid)| pid)
         .collect())
 }
@@ -117,29 +137,31 @@ async fn own_pids(logind: &ManagerProxy<'static>) -> Result<Vec<u32>> {
 /// Takes the inhibitor; a new one takes the place of the one before, so
 /// there is no moment with none. The tool waits for the holder's word: the
 /// password is typed meanwhile.
-pub async fn on(why: Option<&str>) -> Result<Outcome> {
+pub async fn on(kind: Kind, why: Option<&str>) -> Result<Outcome> {
     let why = why_or_default(why);
     let logind = logind().await?;
-    let before = own_pids(&logind).await?;
-    let word = start_holder(&why)?;
-    match word.as_str() {
-        hold::HELD => {
-            let_go(&before)?;
-            Ok(Outcome::Held(why))
+    for &what in kind.whats() {
+        let before = own_pids_for_what(&logind, what).await?;
+        let word = start_holder(&why, what)?;
+        match word.as_str() {
+            hold::HELD => let_go(&before)?,
+            "" => return Err(Error::HolderGone),
+            reason => {
+                return Err(Error::InhibitRefused {
+                    reason: reason.to_owned(),
+                });
+            }
         }
-        "" => Err(Error::HolderGone),
-        reason => Err(Error::InhibitRefused {
-            reason: reason.to_owned(),
-        }),
     }
+    Ok(Outcome::Held(why))
 }
 
 /// Starts the holder in the process group of the tool, so polkit can ask
 /// on the terminal, and reads its first line.
-fn start_holder(why: &str) -> Result<String> {
+fn start_holder(why: &str, what: &str) -> Result<String> {
     let exe = std::env::current_exe().map_err(|source| Error::HolderStart { source })?;
     let mut child = Command::new(exe)
-        .args([hold::VERB, why])
+        .args([hold::VERB, why, what])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -156,9 +178,9 @@ fn start_holder(why: &str) -> Result<String> {
 }
 
 /// Lets the inhibitor go.
-pub async fn off() -> Result<Outcome> {
+pub async fn off(kind: Kind) -> Result<Outcome> {
     let logind = logind().await?;
-    let pids = own_pids(&logind).await?;
+    let pids = own_pids(&logind, kind).await?;
     if pids.is_empty() {
         return Ok(Outcome::NothingToLetGo);
     }
@@ -167,13 +189,52 @@ pub async fn off() -> Result<Outcome> {
 }
 
 /// Takes the inhibitor when it is not held, else lets it go.
-pub async fn toggle(why: Option<&str>) -> Result<Outcome> {
+pub async fn toggle(kind: Kind, why: Option<&str>) -> Result<Outcome> {
     let logind = logind().await?;
-    if own_pids(&logind).await?.is_empty() {
-        on(why).await
+    if own_pids(&logind, kind).await?.is_empty() {
+        on(kind, why).await
     } else {
-        off().await
+        off(kind).await
     }
+}
+
+/// Cycles from none to power to all to none.
+pub async fn cycle(why: Option<&str>) -> Result<Outcome> {
+    let logind = logind().await?;
+    let idle = own_pids(&logind, Kind::Idle).await?;
+    let power = own_pids(&logind, Kind::Power).await?;
+    if !idle.is_empty() {
+        off(Kind::All).await
+    } else if !power.is_empty() {
+        on(Kind::All, why).await
+    } else {
+        on(Kind::Power, why).await
+    }
+}
+
+async fn own_pids_for_what(logind: &ManagerProxy<'static>, what: &str) -> Result<Vec<u32>> {
+    let uid = getuid().as_raw();
+    let rows = logind
+        .list_inhibitors()
+        .await
+        .map_err(|source| Error::Bus {
+            what: "list the inhibitors of logind",
+            source,
+        })?;
+    Ok(rows
+        .into_iter()
+        .filter(|(found, who, _, _, owner, _)| who == WHO && *owner == uid && found == what)
+        .map(|(_, _, _, _, _, pid)| pid)
+        .collect())
+}
+
+fn matches_kind(what: &str, kind: Kind) -> bool {
+    let wanted = kind.whats();
+    what.split(':').any(|part| {
+        wanted
+            .iter()
+            .any(|want| want.split(':').any(|item| item == part))
+    })
 }
 
 /// Sends `SIGTERM` to the process groups of these pids. A holder leads a

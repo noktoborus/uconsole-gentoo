@@ -20,8 +20,8 @@ pub const VERB: &str = "hold";
 pub const HELD: &str = "held";
 
 /// Takes the inhibitor, says the word, and holds it until `SIGTERM`.
-pub async fn hold(why: &str) -> Result<()> {
-    let taken = detached(why).await;
+pub async fn hold(why: &str, what: &str) -> Result<()> {
+    let taken = detached(why, what).await;
     let word = match &taken {
         Ok(_) => HELD.to_owned(),
         Err(error) => chain(error),
@@ -38,8 +38,11 @@ pub async fn hold(why: &str) -> Result<()> {
 }
 
 /// Takes the inhibitor, leaves the terminal, and follows `SIGTERM`.
-async fn detached(why: &str) -> Result<(std::os::fd::OwnedFd, tokio::signal::unix::Signal)> {
-    let inhibitor = take(WHO, why).await?;
+async fn detached(
+    why: &str,
+    what: &str,
+) -> Result<(std::os::fd::OwnedFd, tokio::signal::unix::Signal)> {
+    let inhibitor = take(WHO, why, what).await?;
     setsid().map_err(|errno| Error::Detach {
         source: errno.into(),
     })?;

@@ -36,6 +36,15 @@ status.announced:
 status.held:
   en: "waiting to enter %{action}, held by:"
   ru: "ожидает входа в %{action}, удерживают:"
+status.own_inhibitor:
+  en: "%{kind}: %{why}"
+  ru: "%{kind}: %{why}"
+status.kind_idle:
+  en: "idle"
+  ru: "простой"
+status.kind_power:
+  en: "power"
+  ru: "питание"
 status.inhibitor:
   en: "%{why} by %{user}"
   ru: "%{why}: %{user}"

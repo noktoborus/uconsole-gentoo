@@ -14,6 +14,7 @@ use crate::bus::{NAME, SessionRow};
 use crate::error::{Error, Result};
 use crate::service::{Clock, Monotonic};
 use crate::world::Inhibitor;
+use crate::world::logind::ManagerProxy;
 
 /// The object of the state of the service.
 #[proxy(
@@ -59,6 +60,7 @@ fn bus(what: &'static str) -> impl FnOnce(zbus::Error) -> Error {
 /// The tool on the system bus.
 struct Client {
     conn: Connection,
+    logind: ManagerProxy<'static>,
     state: StateProxy<'static>,
     held: HeldProxy<'static>,
 }
@@ -69,6 +71,9 @@ impl Client {
         let conn = Connection::system()
             .await
             .map_err(bus("connect to the system bus"))?;
+        let logind = ManagerProxy::new(&conn)
+            .await
+            .map_err(bus("make the proxy of logind"))?;
         let state = StateProxy::builder(&conn)
             .cache_properties(zbus::proxy::CacheProperties::No)
             .build()
@@ -79,7 +84,12 @@ impl Client {
             .build()
             .await
             .map_err(bus("make the proxy of the service"))?;
-        Ok(Self { conn, state, held })
+        Ok(Self {
+            conn,
+            logind,
+            state,
+            held,
+        })
     }
 
     /// Reads all the tool shows. The service not there, or `HeldBy` not
@@ -91,12 +101,35 @@ impl Client {
         } else {
             Some(Vec::new())
         };
-        let rows = if service.is_some() {
+        let held_rows = if service.is_some() {
             self.held.held_by_inhibitors().await.unwrap_or_default()
         } else {
             Vec::new()
         };
+        let rows = self
+            .logind
+            .list_inhibitors()
+            .await
+            .map_err(bus("list the inhibitors of logind"))?;
         let inhibitors: Vec<Inhibitor> = rows
+            .into_iter()
+            .map(|(what, who, why, mode, uid, pid)| Inhibitor {
+                what,
+                who,
+                why,
+                mode,
+                uid,
+                pid,
+            })
+            .filter(|inhibitor| {
+                matches!(inhibitor.mode.as_str(), "block" | "block-weak")
+                    && inhibitor
+                        .what
+                        .split(':')
+                        .any(|kind| matches!(kind, "idle" | "sleep" | "shutdown"))
+            })
+            .collect();
+        let held_inhibitors = held_rows
             .into_iter()
             .map(|(what, who, why, mode, uid, pid)| Inhibitor {
                 what,
@@ -111,6 +144,7 @@ impl Client {
             service,
             sessions,
             inhibitors,
+            held_inhibitors,
             uid: getuid().as_raw(),
         })
     }

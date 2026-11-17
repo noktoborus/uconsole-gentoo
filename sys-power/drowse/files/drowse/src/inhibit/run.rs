@@ -8,7 +8,7 @@ use std::process::{Command, ExitStatus};
 use rustix::io::{FdFlags, fcntl_setfd};
 use tokio::signal::unix::{SignalKind, signal};
 
-use super::{UNTIL, take, why_or_default};
+use super::{Kind, UNTIL, take, why_or_default};
 use crate::error::{Error, Result};
 
 /// The exit code of a command killed by a signal: 128 and the signal, as
@@ -32,16 +32,20 @@ fn exit_code(status: ExitStatus) -> u8 {
 }
 
 /// Holds the inhibitor while the command runs; gives its exit code.
-pub async fn run(why: Option<&str>, command: &[String]) -> Result<u8> {
+pub async fn run(kind: Kind, why: Option<&str>, command: &[String]) -> Result<u8> {
     let Some((program, args)) = command.split_first() else {
         return Ok(0);
     };
     let why = why_or_default(why);
-    let inhibitor = take(&who(command), &why).await?;
-    fcntl_setfd(&inhibitor, FdFlags::CLOEXEC).map_err(|errno| Error::Run {
-        program: program.clone(),
-        source: errno.into(),
-    })?;
+    let mut inhibitors = Vec::new();
+    for what in kind.whats() {
+        let inhibitor = take(&who(command), &why, what).await?;
+        fcntl_setfd(&inhibitor, FdFlags::CLOEXEC).map_err(|errno| Error::Run {
+            program: program.clone(),
+            source: errno.into(),
+        })?;
+        inhibitors.push(inhibitor);
+    }
     let _interrupt = followed(SignalKind::interrupt(), "SIGINT")?;
     let _quit = followed(SignalKind::quit(), "SIGQUIT")?;
     let status = Command::new(program)
@@ -51,7 +55,7 @@ pub async fn run(why: Option<&str>, command: &[String]) -> Result<u8> {
             program: program.clone(),
             source,
         })?;
-    drop(inhibitor);
+    drop(inhibitors);
     Ok(exit_code(status))
 }
 
