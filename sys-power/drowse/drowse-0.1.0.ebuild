@@ -10,6 +10,12 @@
 # CRATES is its Cargo.lock. The modes of files/ are not kept.
 # /etc/drowse.conf has every key with its default in comments; /etc is
 # in CONFIG_PROTECT, so a change made on the device is kept on an update.
+#
+# The profiles of TuneD cm5-powersave, the power save of the first stage,
+# and cm5-powersave-no-radio, a deeper step with every radio off, are
+# examples in the documentation. With USE=tuned-rpi5 they are also
+# profiles of TuneD in /usr/lib/tuned/profiles, and TuneD comes with
+# them.
 
 EAPI=8
 
@@ -147,15 +153,17 @@ LICENSE="MIT"
 LICENSE+=" BSD LGPL-2.1+ MIT Unicode-3.0 ZLIB"
 SLOT="0"
 KEYWORDS="arm64"
+IUSE="tuned-rpi5"
 
 DEPEND="sys-apps/systemd"
 RDEPEND="
 	${DEPEND}
 	sys-apps/dbus
+	tuned-rpi5? ( sys-apps/tuned )
 "
 BDEPEND="virtual/pkgconfig"
 
-# files/ sha256: 33339e28b9eca1ad224a6e6b156c218bb1e32065590632eff8f63b595feea953
+# files/ sha256: 3edb9a84c265ab930a6d5edc0ff018864936a8e5cefb237298a52265b197ab6a
 
 src_unpack() {
 	cargo_src_unpack
@@ -185,6 +193,17 @@ src_install() {
 	docinto examples
 	dodoc -r examples/.
 	docompress -x "/usr/share/doc/${PF}/examples"
-	# TuneD runs the script of the profile by its path.
-	fperms +x "/usr/share/doc/${PF}/examples/tuned/drowse-cm5-powersave/usb-autosuspend.sh"
+	# TuneD runs the scripts of the profiles by their paths.
+	fperms +x "/usr/share/doc/${PF}/examples/tuned/cm5-powersave/usb-autosuspend.sh" \
+		"/usr/share/doc/${PF}/examples/tuned/cm5-powersave-no-radio/rfkill-off.sh"
+	if use tuned-rpi5; then
+		insinto /usr/lib/tuned/profiles/cm5-powersave
+		doins examples/tuned/cm5-powersave/tuned.conf
+		exeinto /usr/lib/tuned/profiles/cm5-powersave
+		doexe examples/tuned/cm5-powersave/usb-autosuspend.sh
+		insinto /usr/lib/tuned/profiles/cm5-powersave-no-radio
+		doins examples/tuned/cm5-powersave-no-radio/tuned.conf
+		exeinto /usr/lib/tuned/profiles/cm5-powersave-no-radio
+		doexe examples/tuned/cm5-powersave-no-radio/rfkill-off.sh
+	fi
 }

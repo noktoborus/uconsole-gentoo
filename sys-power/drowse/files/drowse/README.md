@@ -58,17 +58,48 @@ With no `/etc/drowse.conf` the service does nothing: the default
 `/usr/share/drowse/drowse.conf`, to compare with or to take again. The file of the package sets, on battery, the
 power save at 10 min of idle and `poweroff` at 50 min; on AC nothing.
 
-The power save is the profile of TuneD `drowse-cm5-powersave`:
-`powersave`, the CPU at 800 MHz at most, and USB autosuspend on every
-device but those of `KEEP` in `usb-autosuspend.sh`: `434b:5543`, the
-keyboard of the uConsole, and `1eaf:*`, its bootloader. The hubs these hang on, up to
-the root hub, are set to never suspend. The script writes the values
-before back when the profile ends. The package gives it as an
-example only (`examples/tuned/`, installed with the documentation);
-copy it to the profiles of TuneD:
+The power save is the profile of TuneD `cm5-powersave`, for the BCM2712
+(a Raspberry Pi 5 or CM5):
+
+- `powersave`;
+- the CPU at 800 MHz at most;
+- USB autosuspend on every device but those of `KEEP` in
+  `usb-autosuspend.sh`: `434b:5543`, the keyboard of the uConsole, and
+  `1eaf:*`, its bootloader. The hubs these hang on, up to the root hub,
+  are set to never suspend. The script writes the values before back
+  when the profile ends;
+- the dirty pages written once a minute (`vm.dirty_writeback_centisecs`,
+  `vm.dirty_expire_centisecs`): a power cut or a crash loses up to a
+  minute of writes;
+- runtime PM of every PCI device (`power/control=auto`); a device
+  suspends only if its driver allows it, and nvme and RP1 do not;
+- printing (`cups`) and the timers of maintenance (`fstrim.timer`,
+  `systemd-tmpfiles-clean.timer`) stopped; they start again when the
+  profile ends.
+
+A deeper step of the power save is the profile
+`cm5-powersave-no-radio`: `cm5-powersave`, and every radio off by its
+soft block of rfkill (`rfkill-off.sh`: Wi-Fi, Bluetooth, a modem). A
+radio that was off before stays off when the profile ends. Set it by a
+stage of its own, after that of `cm5-powersave`:
 
 ```
-cp -r /usr/share/doc/drowse-*/examples/tuned/drowse-cm5-powersave \
+[IdleBattery-1]
+IdleTime=10m
+Countdown=Never
+Action=tuned-adm profile cm5-powersave-no-radio
+ActionHint=radio off
+Resume=systemctl try-restart tuned-ppd.service
+```
+
+TuneD writes every value before back when the profile ends. The package
+gives both as examples (`examples/tuned/`, installed with the
+documentation). If `tuned-adm list` does not show them, copy them to the
+profiles of TuneD:
+
+```
+cp -r /usr/share/doc/drowse-*/examples/tuned/cm5-powersave \
+    /usr/share/doc/drowse-*/examples/tuned/cm5-powersave-no-radio \
     /etc/tuned/profiles/
 ```
 

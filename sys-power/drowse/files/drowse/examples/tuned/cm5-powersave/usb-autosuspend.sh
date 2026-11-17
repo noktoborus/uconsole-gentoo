@@ -1,5 +1,5 @@
 #!/bin/sh
-# The USB autosuspend of the profile drowse-cm5-powersave, run by TuneD:
+# The USB autosuspend of the profile cm5-powersave, run by TuneD:
 # "start" when the profile is set, "stop" when it ends.
 #
 # The kernel lets a USB device suspend only with power/control=auto; it
@@ -22,7 +22,7 @@
 #       /sys/bus/usb/devices/*/product
 
 KEEP="434b:5543 1eaf:*"
-SAVED=/run/drowse-usb-control
+SAVED=/run/cm5-powersave-usb-control
 
 # Whether a device "vendor:product" is one of KEEP. The patterns are not
 # expanded as names of files (set -f).

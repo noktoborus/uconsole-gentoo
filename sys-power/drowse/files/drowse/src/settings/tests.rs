@@ -238,9 +238,7 @@ fn the_file_of_the_package() {
     assert_eq!(battery[0].countdown, Span::Never);
     assert_eq!(
         battery[0].action,
-        Some(Action::Command(command(
-            "tuned-adm profile drowse-cm5-powersave"
-        )))
+        Some(Action::Command(command("tuned-adm profile cm5-powersave")))
     );
     assert_eq!(battery[0].shown_name(), "power save");
     assert_eq!(

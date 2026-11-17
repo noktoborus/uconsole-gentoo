@@ -5,4 +5,7 @@
 		<email>noktoborus@gmail.com</email>
 	</maintainer>
 	<longdescription>See README.md and REQUIREMENTS.md of drowse.</longdescription>
+	<use>
+		<flag name="tuned-rpi5">Install the profiles of <pkg>sys-apps/tuned</pkg> cm5-powersave and cm5-powersave-no-radio (a Raspberry Pi 5 or CM5 while idle) as profiles, not only as examples</flag>
+	</use>
 </pkgmetadata>
