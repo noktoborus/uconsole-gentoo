@@ -13,7 +13,7 @@
 #
 # The profiles of TuneD cm5-powersave, the power save of the first stage,
 # and cm5-powersave-no-radio, a deeper step with every radio off, are
-# examples in the documentation. With USE=tuned-rpi5 they are also
+# examples in the documentation. With USE=cm5-tuned they are also
 # profiles of TuneD in /usr/lib/tuned/profiles, and TuneD comes with
 # them.
 
@@ -153,13 +153,13 @@ LICENSE="MIT"
 LICENSE+=" BSD LGPL-2.1+ MIT Unicode-3.0 ZLIB"
 SLOT="0"
 KEYWORDS="arm64"
-IUSE="tuned-rpi5"
+IUSE="cm5-tuned"
 
 DEPEND="sys-apps/systemd"
 RDEPEND="
 	${DEPEND}
 	sys-apps/dbus
-	tuned-rpi5? ( sys-apps/tuned )
+	cm5-tuned? ( sys-apps/tuned )
 "
 BDEPEND="virtual/pkgconfig"
 
@@ -196,7 +196,7 @@ src_install() {
 	# TuneD runs the scripts of the profiles by their paths.
 	fperms +x "/usr/share/doc/${PF}/examples/tuned/cm5-powersave/usb-autosuspend.sh" \
 		"/usr/share/doc/${PF}/examples/tuned/cm5-powersave-no-radio/rfkill-off.sh"
-	if use tuned-rpi5; then
+	if use cm5-tuned; then
 		insinto /usr/lib/tuned/profiles/cm5-powersave
 		doins examples/tuned/cm5-powersave/tuned.conf
 		exeinto /usr/lib/tuned/profiles/cm5-powersave
