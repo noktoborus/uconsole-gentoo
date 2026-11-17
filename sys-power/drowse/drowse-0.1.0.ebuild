@@ -2,7 +2,8 @@
 # of its stages (a command and its undo, an action of power); its state
 # is on the system bus. drowse-inhibit holds the system by hand,
 # drowse-status shows the state, for waybar too. With USE=waybar the
-# module files go to /etc/xdg/waybar. /etc/drowse.yaml has the settings.
+# module files go to /etc/xdg/waybar. With USE=sway a file sets the idle
+# hint in Sway. /etc/drowse.yaml has the settings.
 # The preset enables the service, its config watcher and its start after
 # sleep.
 #
@@ -156,18 +157,22 @@ LICENSE="MIT"
 LICENSE+=" BSD LGPL-2.1+ MIT Unicode-3.0 ZLIB"
 SLOT="0"
 KEYWORDS="arm64"
-IUSE="cm5-tuned waybar"
+IUSE="cm5-tuned sway waybar"
 
 DEPEND="sys-apps/systemd"
 RDEPEND="
 	${DEPEND}
 	sys-apps/dbus
 	cm5-tuned? ( sys-apps/tuned )
+	sway? (
+		gui-wm/sway
+		gui-apps/swayidle
+	)
 	waybar? ( gui-apps/waybar )
 "
 BDEPEND="virtual/pkgconfig"
 
-# files/ sha256: 57b6b6e807ba27ca9afae72c5af94ded374c39159904d309aa351f8e42eb84c2
+# files/ sha256: b4c15691f99fe1f6e82c71547ea5c62ec6a57d197538e49c832fb11c58e44b7c
 
 src_unpack() {
 	cargo_src_unpack
@@ -192,6 +197,10 @@ src_install() {
 	if use waybar; then
 		insinto /etc/xdg/waybar
 		doins waybar/drowse.jsonc waybar/drowse.css
+	fi
+	if use sway; then
+		insinto /etc/sway/config.d
+		doins "${FILESDIR}"/80-idlehint.conf
 	fi
 	dodoc README.md
 	# The profile of TuneD is an example the user copies by hand; kept
