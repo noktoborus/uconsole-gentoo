@@ -7,6 +7,7 @@ pub mod system;
 pub(crate) mod logind;
 mod systemd;
 mod upower;
+pub mod what;
 
 use std::future::Future;
 
@@ -75,6 +76,13 @@ pub struct Inhibitor {
     pub uid: u32,
     /// The pid of the one that holds it.
     pub pid: u32,
+}
+
+impl Inhibitor {
+    /// The kinds it holds, of those drowse looks at.
+    pub fn holds(&self) -> what::Holds {
+        what::Holds::parse(&self.what)
+    }
 }
 
 /// The power source.

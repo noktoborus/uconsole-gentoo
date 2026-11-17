@@ -10,6 +10,7 @@ use std::time::Duration;
 pub use units::{Job, unit_name};
 
 use crate::settings::{LogindAction, Power, Section, SectionKind, Settings, Span};
+use crate::world::what::Hold;
 use crate::world::{Inhibitor, PowerSource, Session, SessionState};
 use units::{Ended, Units};
 
@@ -684,26 +685,36 @@ impl Engine {
     }
 }
 
-/// The inhibitors that hold entry into this section.
+/// The inhibitors that hold entry into this section: of the kind its
+/// entry needs, whatever else they hold and in whatever order logind
+/// gives the kinds.
 fn held_by(section: &Section, inhibitors: &[Inhibitor]) -> Vec<Inhibitor> {
-    let kind = match &section.kind {
-        SectionKind::Command { .. } => "idle",
+    let Some(kind) = hold_of(section) else {
+        return Vec::new();
+    };
+    inhibitors
+        .iter()
+        .filter(|inhibitor| MODES_THAT_HOLD.contains(&inhibitor.mode.as_str()))
+        .filter(|inhibitor| inhibitor.holds().contains(kind))
+        .cloned()
+        .collect()
+}
+
+/// The kind of inhibitor that holds the entry into a section: `idle` for a
+/// command, and for an action of logind the kind logind itself checks.
+fn hold_of(section: &Section) -> Option<Hold> {
+    match &section.kind {
+        SectionKind::Command { .. } => Some(Hold::Idle),
         SectionKind::Action(
             LogindAction::Suspend
             | LogindAction::Hibernate
             | LogindAction::HybridSleep
             | LogindAction::SuspendThenHibernate
             | LogindAction::Sleep,
-        ) => "sleep",
-        SectionKind::Action(LogindAction::Poweroff | LogindAction::Halt) => "shutdown",
-        SectionKind::Action(_) => return Vec::new(),
-    };
-    inhibitors
-        .iter()
-        .filter(|inhibitor| MODES_THAT_HOLD.contains(&inhibitor.mode.as_str()))
-        .filter(|inhibitor| inhibitor.what.split(':').any(|item| item == kind))
-        .cloned()
-        .collect()
+        ) => Some(Hold::Sleep),
+        SectionKind::Action(LogindAction::Poweroff | LogindAction::Halt) => Some(Hold::Shutdown),
+        SectionKind::Action(_) => None,
+    }
 }
 
 /// The journal line for an entry that waits for an inhibitor.

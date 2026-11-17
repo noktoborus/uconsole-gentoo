@@ -123,10 +123,7 @@ impl Client {
             })
             .filter(|inhibitor| {
                 matches!(inhibitor.mode.as_str(), "block" | "block-weak")
-                    && inhibitor
-                        .what
-                        .split(':')
-                        .any(|kind| matches!(kind, "idle" | "sleep" | "shutdown"))
+                    && !inhibitor.holds().is_empty()
             })
             .collect();
         let held_inhibitors = held_rows

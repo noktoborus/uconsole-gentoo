@@ -10,6 +10,7 @@ use rust_i18n::t;
 use crate::bus::SessionRow;
 use crate::inhibit::{UNTIL, is_own};
 use crate::world::Inhibitor;
+use crate::world::what::Holds;
 
 /// The uid of root.
 const ROOT: u32 = 0;
@@ -74,10 +75,9 @@ impl Observed {
         let mut idle = false;
         let mut power = false;
         for inhibitor in self.inhibitors.iter().filter(|i| self.is_own_inhibitor(i)) {
-            for kind in inhibitor.what.split(':') {
-                idle |= kind == "idle";
-                power |= kind == "sleep" || kind == "shutdown";
-            }
+            let holds = inhibitor.holds();
+            idle |= holds.meets(Holds::IDLE);
+            power |= holds.meets(Holds::POWER);
         }
         (idle, power)
     }
@@ -236,7 +236,7 @@ fn inhibitor_line(inhibitor: &Inhibitor, user_of: &dyn Fn(u32) -> String) -> Str
     )
     .into_owned();
     if is_own(&inhibitor.who) {
-        let kind = if inhibitor.what.split(':').any(|item| item == "idle") {
+        let kind = if inhibitor.holds().meets(Holds::IDLE) {
             t!("status.kind_idle").into_owned()
         } else {
             t!("status.kind_power").into_owned()

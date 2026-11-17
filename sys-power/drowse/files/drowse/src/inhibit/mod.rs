@@ -22,6 +22,7 @@ use zbus::Connection;
 
 use crate::error::{Error, Result};
 use crate::world::logind::ManagerProxy;
+use crate::world::what::Holds;
 
 /// The `who` of the inhibitor of `on`.
 pub const WHO: &str = "drowse-inhibit";
@@ -46,8 +47,8 @@ impl Kind {
     pub fn whats(self) -> &'static [&'static str] {
         match self {
             Self::Idle => &["idle"],
-            Self::Power => &["sleep:shutdown"],
-            Self::All => &["idle", "sleep:shutdown"],
+            Self::Power => &["shutdown:sleep"],
+            Self::All => &["idle", "shutdown:sleep"],
         }
     }
 }
@@ -223,18 +224,22 @@ async fn own_pids_for_what(logind: &ManagerProxy<'static>, what: &str) -> Result
         })?;
     Ok(rows
         .into_iter()
-        .filter(|(found, who, _, _, owner, _)| who == WHO && *owner == uid && found == what)
+        .filter(|(found, who, _, _, owner, _)| {
+            who == WHO && *owner == uid && same_what(found, what)
+        })
         .map(|(_, _, _, _, _, pid)| pid)
         .collect())
 }
 
+fn same_what(found: &str, wanted: &str) -> bool {
+    Holds::parse(found) == Holds::parse(wanted)
+}
+
 fn matches_kind(what: &str, kind: Kind) -> bool {
-    let wanted = kind.whats();
-    what.split(':').any(|part| {
-        wanted
-            .iter()
-            .any(|want| want.split(':').any(|item| item == part))
-    })
+    let wanted = kind.whats().iter().map(|what| Holds::parse(what));
+    wanted
+        .into_iter()
+        .any(|want| Holds::parse(what).meets(want))
 }
 
 /// Sends `SIGTERM` to the process groups of these pids. A holder leads a
@@ -256,4 +261,23 @@ fn let_go(pids: &[u32]) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn logind_order_matches_the_requested_inhibitor() {
+        assert_eq!(Kind::Power.whats(), &["shutdown:sleep"]);
+        assert!(matches_kind("shutdown:sleep", Kind::Power));
+        assert!(matches_kind("sleep:shutdown", Kind::Power));
+        assert!(!matches_kind("idle", Kind::Power));
+    }
+
+    #[test]
+    fn an_existing_inhibitor_is_found_without_order_mattering() {
+        assert!(same_what("shutdown:sleep", "sleep:shutdown"));
+        assert!(!same_what("shutdown", "sleep:shutdown"));
+    }
 }
