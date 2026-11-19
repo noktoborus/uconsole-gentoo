@@ -5,6 +5,9 @@
 		<name>Jonas Frei</name>
 		<email>freijon@kagimail.com</email>
 	</maintainer>
+	<use>
+		<flag name="pulseaudio">Build the volume widget of the control center with <pkg>media-libs/libpulse</pkg></flag>
+	</use>
 	<upstream>
 		<remote-id type="github">ErikReider/SwayNotificationCenter</remote-id>
 		<bugs-to>https://github.com/ErikReider/SwayNotificationCenter/issues</bugs-to>

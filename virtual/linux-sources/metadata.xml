@@ -5,4 +5,7 @@
 		<email>noktoborus@gmail.com</email>
 	</maintainer>
 	<longdescription>Points virtual/linux-sources to sys-kernel/uconsole-pi-kernel.</longdescription>
+	<use>
+		<flag name="firmware">Install the firmware of the kernel, <pkg>sys-kernel/linux-firmware</pkg></flag>
+	</use>
 </pkgmetadata>
