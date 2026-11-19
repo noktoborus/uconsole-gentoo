@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * The power supply "axp22x-soft-battery" and its properties. The values
- * of design come from the device tree; the voltage, the current and the
- * power of now are read at the request (live.c); the others are a copy of
- * the last sample of the timer. No temp, no charge_*, no health: upower works out the
- * times and the health from the energy.
+ * of design come from the device tree; the others are a copy of the last
+ * sample of the timer. No temp, no charge_*, no health: upower works out
+ * the times and the health from the energy.
  */
 
 #include <linux/device.h>
@@ -22,7 +21,6 @@ static const enum power_supply_property sb_props[] = {
 	POWER_SUPPLY_PROP_TECHNOLOGY,
 	POWER_SUPPLY_PROP_CAPACITY,
 	POWER_SUPPLY_PROP_VOLTAGE_NOW,
-	POWER_SUPPLY_PROP_VOLTAGE_OCV,
 	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_POWER_NOW,
 	POWER_SUPPLY_PROP_ENERGY_NOW,
@@ -33,7 +31,6 @@ static const enum power_supply_property sb_props[] = {
 	POWER_SUPPLY_PROP_VOLTAGE_MIN,
 	POWER_SUPPLY_PROP_VOLTAGE_MAX,
 	POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
-	POWER_SUPPLY_PROP_INTERNAL_RESISTANCE,
 	POWER_SUPPLY_PROP_SCOPE,
 };
 
@@ -101,11 +98,14 @@ static int sb_get_now(struct sb *sb, enum power_supply_property psp,
 	case POWER_SUPPLY_PROP_CAPACITY:
 		val->intval = sb->snap.capacity;
 		return 0;
-	case POWER_SUPPLY_PROP_VOLTAGE_OCV:
-		val->intval = sb->snap.ocv_uv;
+	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
+		val->intval = sb->snap.v_uv;
 		return 0;
-	case POWER_SUPPLY_PROP_INTERNAL_RESISTANCE:
-		val->intval = sb->snap.r_uohm;
+	case POWER_SUPPLY_PROP_CURRENT_NOW:
+		val->intval = sb->snap.i_ua;
+		return 0;
+	case POWER_SUPPLY_PROP_POWER_NOW:
+		val->intval = div_s64((s64)sb->snap.v_uv * sb->snap.i_ua, 1000000);
 		return 0;
 	case POWER_SUPPLY_PROP_ENERGY_NOW:
 		val->intval = div_u64((u64)sb->energy_full_uwh * sb->snap.capacity, 100);
@@ -115,32 +115,6 @@ static int sb_get_now(struct sb *sb, enum power_supply_property psp,
 	}
 }
 
-/* The values of now, read at the request (live.c). */
-static bool sb_is_live(enum power_supply_property psp)
-{
-	return psp == POWER_SUPPLY_PROP_VOLTAGE_NOW ||
-	       psp == POWER_SUPPLY_PROP_CURRENT_NOW ||
-	       psp == POWER_SUPPLY_PROP_POWER_NOW;
-}
-
-static int sb_get_live(struct sb *sb, enum power_supply_property psp,
-		       union power_supply_propval *val)
-{
-	int v_uv, i_ua, ret;
-
-	ret = sb_live_get(sb, &v_uv, &i_ua);
-	if (ret)
-		return ret;
-
-	if (psp == POWER_SUPPLY_PROP_VOLTAGE_NOW)
-		val->intval = v_uv;
-	else if (psp == POWER_SUPPLY_PROP_CURRENT_NOW)
-		val->intval = i_ua;
-	else
-		val->intval = div_s64((s64)v_uv * i_ua, 1000000);
-	return 0;
-}
-
 static int sb_get_property(struct power_supply *psy,
 			   enum power_supply_property psp,
 			   union power_supply_propval *val)
@@ -148,9 +122,7 @@ static int sb_get_property(struct power_supply *psy,
 	struct sb *sb = power_supply_get_drvdata(psy);
 	int ret = sb_get_fixed(sb, psy->battery_info, psp, val);
 
-	if (ret != -ENOENT)
-		return ret;
-	return sb_is_live(psp) ? sb_get_live(sb, psp, val) : sb_get_now(sb, psp, val);
+	return ret == -ENOENT ? sb_get_now(sb, psp, val) : ret;
 }
 
 static void sb_external_power_changed(struct power_supply *psy)
@@ -163,14 +135,16 @@ static void sb_tell_bound(struct sb *sb)
 	struct power_supply_battery_info *info = sb->psy->battery_info;
 
 	dev_info(sb->dev, "bound: charge current %d mA, V_OFF %d mV, full at %d mV; "
-		 "R %d mOhm, energy_full %u mWh, curve of the charge %s, %d reg-writes\n",
+		 "R %d mOhm, energy_full %u mWh, curve of the charge %s, %d reg-writes; "
+		 "silent at %u ms, guard %s at %u ms\n",
 		 info->constant_charge_current_max_ua / 1000,
 		 info->voltage_min_design_uv / 1000,
 		 info->constant_charge_voltage_max_uv / 1000,
 		 info->factory_internal_resistance_uohm / 1000,
 		 sb->energy_full_uwh / 1000,
 		 sb->cv_len ? "from the device tree" : "none",
-		 sb->n_reg_writes);
+		 sb->n_reg_writes, sb->silent_ms,
+		 sb->hw_protect ? "on" : "off", sb->guard_ms);
 }
 
 /*
@@ -190,7 +164,6 @@ static int sb_init(struct power_supply *psy)
 	ret = sb_read_dt(sb) ?: sb_setup_pmic(sb);
 	if (ret)
 		return ret;
-	sb_r_init(sb);
 	sb_tell_bound(sb);
 	return 0;
 }

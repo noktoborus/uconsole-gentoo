@@ -17,9 +17,8 @@ const PARTIAL_MAX_STOP: i64 = 10;
 /// 0 % is 50 mV over the highest V_end.
 const END_MARGIN_UV: i64 = 50_000;
 
-/// The curve of the charge: a point each 2 %, at most 16 pairs.
-const CV_STEP: i64 = 2;
-const CV_MAX_PAIRS: usize = 16;
+/// The curve of the charge: at most 16 pairs, in whole percents.
+const CV_MAX_PAIRS: i64 = 16;
 
 #[derive(Default)]
 struct Values {
@@ -113,9 +112,19 @@ fn current_at(points: &[(f64, f64)], pct: f64) -> Option<f64> {
     })
 }
 
-/// The curve of the charge: on a grid of 2 %, at each step the mean current
-/// of the runs that have that step; pairs with the current falling, at
-/// most 16, the last ones.
+/// The steps of the grid: whole percents from 100 down to the first, the
+/// step as small as 16 points allow, 1 % at least.
+fn cv_grid(first: i64) -> Vec<i64> {
+    let step = ((100 - first) + CV_MAX_PAIRS - 2) / (CV_MAX_PAIRS - 1);
+    let step = step.max(1);
+    let mut grid: Vec<i64> = (0..CV_MAX_PAIRS).map(|k| 100 - k * step).filter(|&p| p >= first).collect();
+    grid.reverse();
+    grid
+}
+
+/// The curve of the charge: on a grid of whole percents that spans the
+/// phase of constant voltage, at each step the mean current of the runs
+/// that have that step; pairs with the current falling.
 fn mean_cv(charges: &[EnvFile], q_full: f64) -> Option<Vec<(i64, i64)>> {
     let runs: Vec<Vec<(f64, f64)>> =
         charges.iter().filter_map(|r| charge_points(r, q_full)).collect();
@@ -123,9 +132,9 @@ fn mean_cv(charges: &[EnvFile], q_full: f64) -> Option<Vec<(i64, i64)>> {
     if runs.is_empty() || start >= 100.0 {
         return None;
     }
-    let first = ((start / CV_STEP as f64).ceil() as i64 * CV_STEP).max(0);
+    let first = (start.ceil() as i64).max(0);
     let mut pairs: Vec<(i64, i64)> = Vec::new();
-    for pct in (first..=100).step_by(CV_STEP as usize) {
+    for pct in cv_grid(first) {
         let at: Vec<f64> = runs.iter().filter_map(|p| current_at(p, pct as f64)).collect();
         if at.is_empty() {
             continue;
@@ -135,8 +144,6 @@ fn mean_cv(charges: &[EnvFile], q_full: f64) -> Option<Vec<(i64, i64)>> {
             pairs.push((ua, pct));
         }
     }
-    let skip = pairs.len().saturating_sub(CV_MAX_PAIRS);
-    let pairs: Vec<(i64, i64)> = pairs.into_iter().skip(skip).collect();
     (!pairs.is_empty()).then_some(pairs)
 }
 
@@ -252,5 +259,20 @@ mod tests {
         let pairs = mean_cv(&[long, short], 1000.0).unwrap();
         assert_eq!(pairs.first(), Some(&(1000, 80)));
         assert_eq!(pairs.last(), Some(&(150, 100)));
+    }
+
+    #[test]
+    fn a_short_phase_gets_each_whole_percent() {
+        let run = charge("35,20,10,0", "800,500,300,200");
+        let pairs = mean_cv(&[run], 1000.0).unwrap();
+        let pcts: Vec<i64> = pairs.iter().map(|p| p.1).collect();
+        assert_eq!(pcts, vec![97, 98, 99, 100]);
+    }
+
+    #[test]
+    fn a_long_phase_keeps_16_points() {
+        assert_eq!(cv_grid(70).len(), 16);
+        assert_eq!(cv_grid(70).first(), Some(&70));
+        assert_eq!(cv_grid(97), vec![97, 98, 99, 100]);
     }
 }

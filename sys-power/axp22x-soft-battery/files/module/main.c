@@ -107,7 +107,7 @@ static int sb_probe(struct platform_device *pdev)
 	sb->prev_level = -1;
 	sb->prev_status = POWER_SUPPLY_STATUS_UNKNOWN;
 	INIT_DELAYED_WORK(&sb->work, sb_work);
-	ret = devm_mutex_init(dev, &sb->lock) ?: devm_mutex_init(dev, &sb->live_lock);
+	ret = devm_mutex_init(dev, &sb->lock);
 	if (ret)
 		return ret;
 
@@ -147,7 +147,6 @@ static int sb_resume(struct device *dev)
 	struct sb *sb = dev_get_drvdata(dev);
 
 	sb_mean_reset(sb);
-	sb_r_forget_step(sb);
 	dev_info(dev, "resume\n");
 	sb_sample_now(sb);
 	return 0;

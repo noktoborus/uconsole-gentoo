@@ -274,10 +274,12 @@ static const struct sb_setting sb_settings[] = {
 	SB_SETTING("energy-full-microwatt-hours", energy_full_uwh, 1, INT_MAX),
 	SB_SETTING("end-microvolt", end_uv, 0, SB_END_MAX_UV),
 	SB_SETTING("sample-interval-ms", interval_ms, 1000, 600000),
+	SB_SETTING("fast-interval-ms", fast_interval_ms, 100, 600000),
+	SB_SETTING("fast-samples", fast_samples, 0, 100),
 	SB_SETTING("full-margin-microvolt", full_margin_uv, 1, 500000),
 	SB_SETTING("full-current-microamp", full_current_ua, 1, 1000000),
-	SB_SETTING("silent-samples", silent_samples, 1, 1000),
-	SB_SETTING("guard-samples", guard_samples, 2, 1000),
+	SB_SETTING("silent-ms", silent_ms, 1000, 3600000),
+	SB_SETTING("guard-ms", guard_ms, 1000, 3600000),
 };
 
 static int sb_read_settings(struct sb *sb)
@@ -302,8 +304,8 @@ static int sb_check_relations(struct sb *sb)
 	return sb_check_range(sb, SB_PROP("end-microvolt"), sb->end_uv,
 			      sb->psy->battery_info->voltage_min_design_uv,
 			      SB_END_MAX_UV) ?:
-	       sb_check_range(sb, SB_PROP("guard-samples"), sb->guard_samples,
-			      sb->silent_samples + 1, 1000);
+	       sb_check_range(sb, SB_PROP("guard-ms"), sb->guard_ms,
+			      sb->silent_ms + 1, 3600000);
 }
 
 /*
@@ -322,5 +324,6 @@ int sb_read_dt(struct sb *sb)
 
 	sb->full_uv = sb->psy->battery_info->constant_charge_voltage_max_uv -
 		      sb->full_margin_uv;
+	sb->hw_protect = !of_property_read_bool(sb->np, SB_PROP("no-hardware-protect"));
 	return 0;
 }

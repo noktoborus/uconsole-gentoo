@@ -2,7 +2,7 @@
 //! the AXP. It counts the charge and the energy out, learns R by the steps
 //! of the load, and makes the table of OCV at each 5 % of the charge.
 
-use crate::battery::{curve_ocv_at, Status};
+use crate::battery::{curve_level_at, curve_ocv_at, Status};
 use crate::envfile::{join, EnvFile};
 
 /// The table has a point each 5 %, from 100 % down to 0 %.
@@ -159,6 +159,11 @@ impl Discharge {
         let v = near.iter().map(|p| p.v_uv as f64).sum::<f64>() / n;
         let i = near.iter().map(|p| p.out_ua as f64).sum::<f64>() / n;
         Some((v + i * self.r_for_table() as f64 / 1e6).round() as i64)
+    }
+
+    /// The level at the last read: OCV as in the table, on the curve.
+    pub fn level_now(&self, curve: &[(i64, i64)]) -> Option<i64> {
+        curve_level_at(curve, self.ocv_at(self.q_out_uah())?)
     }
 
     fn level(k: usize) -> i64 {

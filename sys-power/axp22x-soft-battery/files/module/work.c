@@ -4,10 +4,10 @@
  * ADC without the lock, works out the status and the level, then puts
  * them into the snapshot under the lock.
  *
- * When all reads find no AXP on the bus, the sample fails. After
- * silent-samples failed samples the values give -ENODATA; after
- * guard-samples the module powers the system off, the one power off it
- * does: user space did not do it in time.
+ * When all reads find no AXP on the bus, the sample fails. When the
+ * samples fail for silent-ms, the values give -ENODATA; for guard-ms, the
+ * module powers the system off, the one power off it does, unless
+ * no-hardware-protect is set.
  */
 
 #include <linux/device.h>
@@ -22,14 +22,6 @@
 
 #define SB_GUARD_MS		20000
 
-/*
- * After the charger comes or goes, the current and bit 6 of 0x01 take a
- * moment to settle; at the start the means are empty: five samples at
- * 1 s follow the first one.
- */
-#define SB_FAST_SAMPLES		5
-#define SB_FAST_MS		1000
-
 /* One sample of the ADC, in mV and mA. */
 struct sb_sample {
 	int v_mv;
@@ -42,13 +34,17 @@ struct sb_means {
 	int i_ua;
 };
 
-/* The next run: soon after a change of the charger or the start, else at the period. */
+/*
+ * The next run. After the charger comes or goes, the current and bit 6 of
+ * 0x01 take a moment to settle; at the start the means are empty: so
+ * fast-samples runs at fast-interval-ms follow, then the period.
+ */
 static void sb_schedule(struct sb *sb)
 {
 	unsigned long delay;
 
 	if (atomic_dec_if_positive(&sb->fast_left) >= 0)
-		delay = msecs_to_jiffies(SB_FAST_MS);
+		delay = msecs_to_jiffies(sb->fast_interval_ms);
 	else
 		delay = round_jiffies_relative(msecs_to_jiffies(sb->interval_ms));
 	queue_delayed_work(system_power_efficient_wq, &sb->work, delay);
@@ -60,7 +56,7 @@ static void sb_schedule(struct sb *sb)
  */
 void sb_sample_now(struct sb *sb)
 {
-	atomic_set(&sb->fast_left, SB_FAST_SAMPLES);
+	atomic_set(&sb->fast_left, sb->fast_samples);
 	mod_delayed_work(system_power_efficient_wq, &sb->work, 0);
 }
 
@@ -86,44 +82,61 @@ static bool sb_axp_silent(const int err[3])
 	return err[0] == -ENXIO && err[1] == -ENXIO && err[2] == -ENXIO;
 }
 
+/* The time since the first failed sample of the row, in ms. */
+static s64 sb_failed_ms(struct sb *sb)
+{
+	return ktime_ms_delta(ktime_get(), sb->failed_since);
+}
+
 static void sb_enter_silence(struct sb *sb, int err)
 {
+	sb->silent = true;
 	scoped_guard(mutex, &sb->lock)
 		sb->snap.silent = true;
 	sb_mean_reset(sb);
-	sb_r_forget_step(sb);
-	dev_warn(sb->dev, "AXP silent: %u samples failed, last %d\n",
-		 sb->failed, err);
+	dev_warn(sb->dev, "AXP silent: %u samples failed in %lld ms, last %d\n",
+		 sb->failed, sb_failed_ms(sb), err);
 	power_supply_changed(sb->psy);
 }
 
 static void sb_guard(struct sb *sb)
 {
+	sb->guarded = true;
+	if (!sb->hw_protect) {
+		dev_warn(sb->dev, "guard off by no-hardware-protect: %u samples failed in %lld ms\n",
+			 sb->failed, sb_failed_ms(sb));
+		return;
+	}
 	dev_emerg(sb->dev, "guard: power off\n");
 	hw_protection_trigger("AXP silent", SB_GUARD_MS);
 }
 
 static void sb_failed_sample(struct sb *sb, int err)
 {
-	sb->failed++;
-	if (sb->failed == sb->silent_samples)
+	if (!sb->failed++)
+		sb->failed_since = ktime_get();
+	if (!sb->silent && sb_failed_ms(sb) >= sb->silent_ms)
 		sb_enter_silence(sb, err);
-	if (sb->failed == sb->guard_samples)
+	if (!sb->guarded && sb_failed_ms(sb) >= sb->guard_ms)
 		sb_guard(sb);
 }
 
 static void sb_good_sample(struct sb *sb)
 {
-	if (sb->failed >= sb->silent_samples)
-		dev_info(sb->dev, "AXP answers again after %u failed samples\n",
-			 sb->failed);
+	if (sb->silent)
+		dev_info(sb->dev, "AXP answers again after %u failed samples, %lld ms\n",
+			 sb->failed, sb_failed_ms(sb));
 	sb->failed = 0;
+	sb->silent = false;
+	sb->guarded = false;
 }
 
 /*
  * The status. With the charger in and a small current of the charge, bit
  * 6 of 0x01 tells a charge from its end; the end with the voltage near
- * the target is the full state.
+ * the target is the full state. Full holds until the charger goes or
+ * the PMIC charges again, so the voltage that falls after the end does
+ * not turn it back and forth.
  */
 static int sb_status(struct sb *sb, bool supplied, const struct sb_sample *s,
 		     int *status)
@@ -145,7 +158,8 @@ static int sb_status(struct sb *sb, bool supplied, const struct sb_sample *s,
 		return ret;
 	if (charging)
 		*status = POWER_SUPPLY_STATUS_CHARGING;
-	else if (s->v_mv * 1000 >= sb->full_uv)
+	else if (sb->prev_status == POWER_SUPPLY_STATUS_FULL ||
+		 s->v_mv * 1000 >= sb->full_uv)
 		*status = POWER_SUPPLY_STATUS_FULL;
 	else
 		*status = POWER_SUPPLY_STATUS_NOT_CHARGING;
@@ -187,7 +201,7 @@ static int sb_hold_level(struct sb *sb, bool supplied, int level)
 
 /* The copy for get_property; true when upower must hear of it. */
 static bool sb_store(struct sb *sb, int status, int level,
-		     const struct sb_sample *s, int ocv_uv)
+		     const struct sb_sample *s)
 {
 	bool changed;
 
@@ -198,8 +212,8 @@ static bool sb_store(struct sb *sb, int status, int level,
 	sb->snap.silent = false;
 	sb->snap.status = status;
 	sb->snap.capacity = level;
-	sb->snap.r_uohm = sb->r_uohm;
-	sb->snap.ocv_uv = ocv_uv;
+	sb->snap.v_uv = s->v_mv * 1000;
+	sb->snap.i_ua = (s->chrg_ma - s->dischrg_ma) * 1000;
 	return changed;
 }
 
@@ -236,11 +250,10 @@ static void sb_take_sample(struct sb *sb, const struct sb_sample *s)
 		return;
 	}
 
-	sb_r_add(sb, supplied, s->v_mv * 1000, (s->chrg_ma - s->dischrg_ma) * 1000);
 	m = sb_add_mean(sb, supplied, s);
 	level = sb_hold_level(sb, supplied,
 			      sb_level(sb, status, supplied, m.v_uv, m.i_ua));
-	changed = sb_store(sb, status, level, s, sb_ocv(sb, m.v_uv, m.i_ua)) ||
+	changed = sb_store(sb, status, level, s) ||
 		  supplied != sb->prev_supplied;
 
 	sb_tell_events(sb, supplied, status, level, s, &m);
@@ -263,7 +276,6 @@ void sb_work(struct work_struct *work)
 				    err[0] ?: err[1] ?: err[2]);
 	} else {
 		sb_good_sample(sb);
-		sb_live_store(sb, s.v_mv * 1000, (s.chrg_ma - s.dischrg_ma) * 1000);
 		sb_take_sample(sb, &s);
 	}
 	sb_schedule(sb);

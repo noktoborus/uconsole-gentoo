@@ -39,7 +39,7 @@ usage: axp22x-soft-battery [--dir <dir>] daemon
 --r-start  R to start the count of R, in micro-ohms; by default
            factory-internal-resistance-micro-ohms of the device tree
 --v-min    the lowest V_end of a valid run, in uV; by default
-           voltage_min_design of the battery of the module";
+           voltage-min-design-microvolt of the device tree";
 
 const DEFAULT_DIR: &str = "/var/lib/axp22x-soft-battery";
 

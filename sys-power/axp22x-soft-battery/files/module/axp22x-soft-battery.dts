@@ -60,6 +60,15 @@
 				axp22x-soft-battery,end-microvolt = <3200000>;
 				/* The time between two samples, in ms. 1000 to 600000. */
 				axp22x-soft-battery,sample-interval-ms = <10000>;
+				/* After the charger comes or goes, and at the start, this
+				 * count of samples comes at fast-interval-ms, then the
+				 * period above. 0 to 100.
+				 */
+				axp22x-soft-battery,fast-samples = <5>;
+				/* The time between two of those samples, in ms. 100 to
+				 * 600000.
+				 */
+				axp22x-soft-battery,fast-interval-ms = <1000>;
 				/* The charge is full when the charger stops and the voltage
 				 * is at the target of the charge less this margin. In uV,
 				 * 1 to 500000.
@@ -69,14 +78,22 @@
 				 * PMIC if it still charges. In uA, 1 to 1000000.
 				 */
 				axp22x-soft-battery,full-current-microamp = <100000>;
-				/* After this count of failed samples in a row, the AXP is
-				 * silent and the values of now are gone. 1 to 1000.
+				/* When the samples fail for this time, in ms, the AXP is
+				 * silent: the values of the battery give an error until a
+				 * sample works again. 1000 to 3600000.
 				 */
-				axp22x-soft-battery,silent-samples = <6>;
-				/* After this count of failed samples in a row, the module
-				 * powers the system off. More than silent-samples, to 1000.
+				axp22x-soft-battery,silent-ms = <60000>;
+				/* When the samples fail for this time, in ms, the module
+				 * powers the system off. More than silent-ms, to 3600000.
 				 */
-				axp22x-soft-battery,guard-samples = <12>;
+				axp22x-soft-battery,guard-ms = <180000>;
+				/* Optional: with this property the module does not power
+				 * the system off at guard-ms; it writes a line only. Then,
+				 * if the AXP22x is gone, nothing powers the system off: the
+				 * cells may run down past the safe voltage.
+				 *
+				 * axp22x-soft-battery,no-hardware-protect;
+				 */
 				/* Optional: the curve of the charge while the voltage is at
 				 * the target. Pairs <uA percent>, 1 to 16; the current
 				 * falls, the percent rises, 0 to 100. With none, the curve
@@ -137,7 +154,7 @@
 					<3608000 20>, <3554000 15>, <3499000 10>, <3437000 5>,
 					<3351000 0>;
 				/* R of the cells, in micro-ohms: 10000 to 500000. The level
-				 * takes OCV = V - I * R.
+				 * takes OCV = V - I * R with this R; gen-dts writes it.
 				 */
 				factory-internal-resistance-micro-ohms = <87000>;
 			};

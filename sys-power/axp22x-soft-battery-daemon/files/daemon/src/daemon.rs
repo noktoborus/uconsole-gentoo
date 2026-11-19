@@ -1,7 +1,12 @@
-//! The daemon: one read of the battery each 10 s.
+//! The daemon: one read each 10 s.
 //!
-//! - A run of a discharge starts when the status leaves Full; it ends at
-//!   the silence of the AXP: the run is saved and the system powered off.
+//! - The voltage and the current come from the ADC of the PMIC (IIO
+//!   `axp22x-adc`). The status comes from the module; with no module, no
+//!   file or no value, the daemon works it out itself.
+//! - Each read of the ADC that fails is a line of the journal. When no read
+//!   works for 60 s, the AXP is gone.
+//! - A run of a discharge starts when the status leaves Full; it ends when
+//!   the AXP is gone: the run is saved and the system powered off.
 //! - A run of a charge starts when the charger comes in; it ends at Full
 //!   and is saved; the charger out before it cuts it.
 //! - Each thing that spoils the count ends the runs: they are printed, a
@@ -14,7 +19,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::sleep;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use crate::battery::{self, Read, Reading, Status};
+use crate::battery::{self, Adc, FullRule, Sample, Status};
 use crate::charge::{self, Charge};
 use crate::discharge::{self, Discharge};
 use crate::store::{self, CHARGE, DISCHARGE};
@@ -23,8 +28,12 @@ use crate::Result;
 const PERIOD: Duration = Duration::from_secs(10);
 const TEMP_PERIOD: Duration = Duration::from_secs(60);
 
-/// More than 60 s between two reads spoils the count.
+/// More than 60 s between two tries to read spoils the count: the daemon
+/// was held.
 const MAX_GAP_S: f64 = 60.0;
+
+/// No read of the ADC works for this time: the AXP is gone.
+const GONE_S: f64 = 60.0;
 
 /// The time asleep: CLOCK_BOOTTIME grew more than CLOCK_MONOTONIC.
 const SUSPEND_S: f64 = 5.0;
@@ -74,16 +83,42 @@ fn wait_period() {
     }
 }
 
+/// One good read: the status and the values of the cells.
+#[derive(Clone, Copy)]
+struct Reading {
+    status: Status,
+    v_uv: i64,
+    i_ua: i64,
+}
+
+/// Where the status comes from; a change is a line of the journal.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Source {
+    Module,
+    Daemon,
+    Nothing,
+}
+
+/// A row of failed reads of the ADC.
+struct Fails {
+    count: u32,
+    since: f64,
+}
+
 struct Daemon<'a> {
     dir: &'a Path,
+    adc: Adc,
+    rule: Option<FullRule>,
     started: Instant,
     last: Option<(f64, Reading)>,
+    last_try: Option<f64>,
+    fails: Option<Fails>,
     discharge: Option<Discharge>,
     charge: Option<Charge>,
-    hwmon: Option<std::path::PathBuf>,
     last_temp: Option<Instant>,
     boot_offset: f64,
-    told_silent: bool,
+    told_gone: bool,
+    source: Option<Source>,
 }
 
 impl<'a> Daemon<'a> {
@@ -146,15 +181,16 @@ impl<'a> Daemon<'a> {
         }
     }
 
-    /// A run cut short: kept in discharge/partial/ with the reason.
+    /// A run cut short: kept in discharge/partial/ with the reason and the
+    /// level at the cut, by OCV on the curve of the device tree.
     fn break_off(&mut self, why: &str) -> Result<()> {
         self.cut_charge(why);
         let Some(d) = self.discharge.take() else {
             return Ok(());
         };
         println!("the run was broken off: {why}");
-        let stop_level = self.last.map(|(_, r)| r.capacity);
         let curve = battery::dt_curve();
+        let stop_level = curve.as_deref().and_then(|c| d.level_now(c));
         let model = stop_level.and_then(|l| d.model_partial(l, curve.as_deref()));
         discharge::print(&d, model.as_ref());
         let Some(model) = model else {
@@ -168,17 +204,17 @@ impl<'a> Daemon<'a> {
         Ok(())
     }
 
-    /// The silence of the AXP at the end of a discharge: the run is saved,
-    /// then the system is powered off.
+    /// The AXP gone at the end of a discharge: the run is saved, then the
+    /// system is powered off.
     fn end_discharge(&mut self) -> Result<()> {
         let Some(d) = self.discharge.take() else {
             return Ok(());
         };
-        println!("the AXP is silent: the end of the run");
+        println!("the AXP is gone: the end of the run");
         let model = d.model_whole();
         discharge::print(&d, Some(&model));
         let mut env = d.env(&model, "daemon");
-        let v_min = battery::design("voltage_min_design").unwrap_or(0);
+        let v_min = battery::dt_voltage_min().unwrap_or(0);
         let sub = match discharge::check(&model, v_min) {
             None => "full",
             Some(reason) => {
@@ -204,14 +240,48 @@ impl<'a> Daemon<'a> {
             return;
         }
         self.last_temp = Some(Instant::now());
-        if self.hwmon.is_none() {
-            self.hwmon = battery::find_hwmon();
-        }
-        let Some(mc) = self.hwmon.as_deref().and_then(battery::read_temp) else {
+        let Some(mc) = self.adc.read_temp() else {
             return;
         };
         if let Some(d) = self.discharge.as_mut() {
             d.add_temp(mc);
+        }
+    }
+
+    fn tell_source(&mut self, source: Source) {
+        if self.source == Some(source) {
+            return;
+        }
+        self.source = Some(source);
+        println!(
+            "status: {}",
+            match source {
+                Source::Module => "from the module",
+                Source::Daemon => "worked out by the daemon: no status of the module",
+                Source::Nothing => "none: no status of the module, no values of the device tree to work it out; reads skipped",
+            }
+        );
+    }
+
+    /// The status of the module, or the one the daemon works out.
+    fn status(&mut self, s: &Sample) -> Option<Status> {
+        if let Some(status) = battery::module_status() {
+            self.tell_source(Source::Module);
+            return Some(status);
+        }
+        let Some(rule) = self.rule else {
+            self.tell_source(Source::Nothing);
+            return None;
+        };
+        match battery::charger_online() {
+            Ok(online) => {
+                self.tell_source(Source::Daemon);
+                Some(rule.status(self.last.map(|(_, r)| r.status), online, s))
+            }
+            Err(e) => {
+                println!("a read of the charger failed: {e}; skipped");
+                None
+            }
         }
     }
 
@@ -250,14 +320,7 @@ impl<'a> Daemon<'a> {
     }
 
     /// A good read; the reason to break the runs off, if any.
-    fn on_reading(&mut self, r: Reading) -> Result<Option<String>> {
-        let t = self.now();
-        self.told_silent = false;
-        if let Some((last_t, _)) = self.last {
-            if self.in_run() && t - last_t > MAX_GAP_S {
-                return Ok(Some(format!("{:.0} s between two reads", t - last_t)));
-            }
-        }
+    fn on_reading(&mut self, t: f64, r: Reading) -> Result<Option<String>> {
         if r.i_ua.abs() > MAX_CURRENT_UA {
             return Ok(Some(format!("a current of {} uA", r.i_ua)));
         }
@@ -265,6 +328,36 @@ impl<'a> Daemon<'a> {
         self.last = Some((t, r));
         self.read_temp();
         Ok(None)
+    }
+
+    /// A failed read of the ADC: a line; after GONE_S of them the AXP is
+    /// gone. Some(exit code) to stop.
+    fn on_failed(&mut self, t: f64, e: std::io::Error) -> Result<Option<ExitCode>> {
+        let f = self.fails.get_or_insert(Fails { count: 0, since: t });
+        f.count += 1;
+        let (count, gone_s) = (f.count, t - f.since);
+        println!("the AXP did not answer: {e}; {count} in a row, {gone_s:.0} s");
+        if gone_s < GONE_S {
+            return Ok(None);
+        }
+        self.cut_charge("the AXP is gone");
+        if self.discharge.is_some() {
+            self.end_discharge()?;
+            Self::power_off();
+            return Ok(Some(ExitCode::SUCCESS));
+        }
+        if !self.told_gone {
+            println!("the AXP is gone, with no run of a discharge");
+            self.told_gone = true;
+        }
+        Ok(None)
+    }
+
+    fn answers_again(&mut self, t: f64) {
+        if let Some(f) = self.fails.take() {
+            println!("the AXP answers again after {} failed reads, {:.0} s", f.count, t - f.since);
+        }
+        self.told_gone = false;
     }
 
     /// One period; Some(exit code) to stop.
@@ -280,71 +373,75 @@ impl<'a> Daemon<'a> {
             self.break_off("a suspend")?;
             return Ok(Some(ExitCode::SUCCESS));
         }
-        match battery::read() {
-            Read::Ok(r) => {
-                if let Some(why) = self.on_reading(r)? {
-                    self.break_off(&why)?;
-                    return Ok(Some(ExitCode::FAILURE));
-                }
-            }
-            Read::Silent if self.discharge.is_some() => {
-                self.cut_charge("the AXP is silent");
-                self.end_discharge()?;
-                Self::power_off();
-                return Ok(Some(ExitCode::SUCCESS));
-            }
-            Read::Silent => {
-                if !self.told_silent {
-                    println!("the AXP is silent, with no run of a discharge");
-                    self.told_silent = true;
-                }
-            }
-            Read::Gone if self.in_run() => {
-                self.break_off("the battery of the module is gone")?;
-                return Ok(Some(ExitCode::FAILURE));
-            }
-            Read::Gone => self.last = None,
-            Read::Failed(e) if self.in_run() => {
-                self.break_off(&format!("a read failed: {e}"))?;
-                return Ok(Some(ExitCode::FAILURE));
-            }
-            Read::Failed(e) => println!("a read failed: {e}"),
+        let t = self.now();
+        let gap = self.last_try.replace(t).map(|prev| t - prev);
+        if let Some(gap) = gap.filter(|&g| g > MAX_GAP_S && self.in_run()) {
+            self.break_off(&format!("{gap:.0} s between two reads"))?;
+            return Ok(Some(ExitCode::FAILURE));
+        }
+        let s = match self.adc.read() {
+            Ok(s) => s,
+            Err(e) => return self.on_failed(t, e),
+        };
+        self.answers_again(t);
+        let Some(status) = self.status(&s) else {
+            return Ok(None);
+        };
+        let r = Reading { status, v_uv: s.v_uv, i_ua: s.i_ua() };
+        if let Some(why) = self.on_reading(t, r)? {
+            self.break_off(&why)?;
+            return Ok(Some(ExitCode::FAILURE));
         }
         Ok(None)
     }
 }
 
-fn wait_for_battery() -> bool {
-    if battery::present() {
-        return true;
-    }
-    println!("waiting for {}", battery::BATTERY);
-    while !battery::present() {
+/// The ADC of the PMIC; None on a stop before it came.
+fn wait_for_adc() -> Option<Adc> {
+    let mut told = false;
+    loop {
+        if let Some(adc) = Adc::find() {
+            return Some(adc);
+        }
+        if !told {
+            println!("waiting for the IIO device axp22x-adc");
+            told = true;
+        }
         if STOP.load(Ordering::SeqCst) {
-            return false;
+            return None;
         }
         wait_period();
     }
-    true
 }
 
 pub fn run(dir: &Path) -> Result<ExitCode> {
     catch_stop();
     println!("started; the runs in {}", dir.display());
-    if !wait_for_battery() {
+    let Some(adc) = wait_for_adc() else {
         return Ok(ExitCode::SUCCESS);
-    }
+    };
+    let rule = match FullRule::from_dt() {
+        Ok(rule) => Some(rule),
+        Err(e) => {
+            println!("no status of its own: {e}");
+            None
+        }
+    };
     let started = Instant::now();
     let mut d = Daemon {
         dir,
+        adc,
+        rule,
         started,
         last: None,
+        last_try: None,
+        fails: None,
         discharge: None,
         charge: None,
-        hwmon: battery::find_hwmon(),
         last_temp: None,
         boot_offset: boottime_s(),
-        told_silent: false,
+        told_gone: false,
+        source: None,
     };
     loop {
         if let Some(code) = d.step()? {

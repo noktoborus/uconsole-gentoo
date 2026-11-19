@@ -3,7 +3,7 @@ name = "axp22x-soft-battery"
 version = "0.1.0"
 edition = "2021"
 license = "GPL-2.0-only"
-description = "Learns the cells of the uConsole from the battery of axp22x_soft_battery"
+description = "Learns the cells of the uConsole from the ADC of the AXP22x"
 publish = false
 
 [dependencies]

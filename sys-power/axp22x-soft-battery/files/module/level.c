@@ -40,10 +40,12 @@ static bool sb_on_cv_curve(struct sb *sb, bool supplied, int v_uv, int i_ua)
 	       i_ua <= (int)sb->cv[0].ua;
 }
 
-/* OCV = V - I * R, with I positive on a charge, R as learned (r.c). */
-int sb_ocv(struct sb *sb, int v_uv, int i_ua)
+/* OCV = V - I * R, with I positive on a charge, R of the device tree. */
+static int sb_ocv(struct sb *sb, int v_uv, int i_ua)
 {
-	return v_uv - (int)div_s64((s64)i_ua * sb->r_uohm, 1000000);
+	int r_uohm = sb->psy->battery_info->factory_internal_resistance_uohm;
+
+	return v_uv - (int)div_s64((s64)i_ua * r_uohm, 1000000);
 }
 
 /* The level on the curve of the discharge; 0 % at the end voltage. */

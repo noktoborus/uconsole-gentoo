@@ -7,9 +7,7 @@
  *	dt.c	the values of the device tree and their checks
  *	pmic.c	the registers of the PMIC
  *	level.c	the level of the charge by the voltage
- *	r.c	R of the cells, learned while it runs
  *	work.c	the samples, the silence of the AXP, the guard
- *	live.c	the voltage and the current of now, at a request
  *	props.c	the power supply and its properties
  */
 
@@ -32,8 +30,7 @@
 /* The curve of the charge has at most 16 pairs <uA percent>. */
 #define SB_CV_MAX_PAIRS		16
 
-/* R is a mean of the last 8 steps, and stays within 10..500 mOhm. */
-#define SB_R_WINDOW		8
+/* R of the device tree stays within 10..500 mOhm. */
 #define SB_R_MIN_UOHM		10000
 #define SB_R_MAX_UOHM		500000
 
@@ -54,8 +51,8 @@ struct sb_snapshot {
 	bool silent;
 	int status;
 	int capacity;
-	int r_uohm;
-	int ocv_uv;
+	int v_uv;
+	int i_ua;
 };
 
 struct sb {
@@ -70,10 +67,13 @@ struct sb {
 	u32 energy_full_uwh;
 	u32 end_uv;
 	u32 interval_ms;
+	u32 fast_interval_ms;
+	u32 fast_samples;
 	u32 full_margin_uv;
 	u32 full_current_ua;
-	u32 silent_samples;
-	u32 guard_samples;
+	u32 silent_ms;
+	u32 guard_ms;
+	bool hw_protect;
 	struct sb_cv_pair cv[SB_CV_MAX_PAIRS];
 	int cv_len;
 	u32 *reg_writes;
@@ -86,20 +86,13 @@ struct sb {
 	int n_mean;
 	int pos_mean;
 	unsigned int failed;
+	ktime_t failed_since;
+	bool silent;
+	bool guarded;
 	int prev_level;
 	bool prev_supplied;
 	int prev_status;
 	bool at_zero;
-
-	/* R in use, learned by the steps of the current (r.c). */
-	int r_uohm;
-	int r_steps[SB_R_WINDOW];
-	int r_n;
-	int r_pos;
-	bool r_prev_valid;
-	bool r_prev_supplied;
-	int r_prev_v_uv;
-	int r_prev_i_ua;
 
 	/* The samples left at a short period after the charger came or went. */
 	atomic_t fast_left;
@@ -107,13 +100,6 @@ struct sb {
 	/* The lock of snap. */
 	struct mutex lock;
 	struct sb_snapshot snap;
-
-	/* The last read of the ADC, for a request (live.c), and its lock. */
-	struct mutex live_lock;
-	bool live_valid;
-	ktime_t live_time;
-	int live_v_uv;
-	int live_i_ua;
 };
 
 /* dt.c */
@@ -125,22 +111,12 @@ int sb_setup_pmic(struct sb *sb);
 int sb_read_charging(struct sb *sb, bool *charging);
 
 /* level.c */
-int sb_ocv(struct sb *sb, int v_uv, int i_ua);
 int sb_level(struct sb *sb, int status, bool supplied, int v_uv, int i_ua);
-
-/* r.c */
-void sb_r_init(struct sb *sb);
-void sb_r_forget_step(struct sb *sb);
-void sb_r_add(struct sb *sb, bool supplied, int v_uv, int i_ua);
 
 /* work.c */
 void sb_work(struct work_struct *work);
 void sb_mean_reset(struct sb *sb);
 void sb_sample_now(struct sb *sb);
-
-/* live.c */
-void sb_live_store(struct sb *sb, int v_uv, int i_ua);
-int sb_live_get(struct sb *sb, int *v_uv, int *i_ua);
 
 /* props.c */
 extern const struct power_supply_desc sb_desc;

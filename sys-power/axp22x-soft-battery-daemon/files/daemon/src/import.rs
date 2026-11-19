@@ -83,19 +83,15 @@ fn build(samples: &[Sample], r_start: i64) -> Result<Discharge> {
     Ok(d)
 }
 
-fn or_design(value: Option<i64>, name: &str, flag: &str) -> Result<i64> {
-    match value {
-        Some(v) => Ok(v),
-        None => battery::design(name).map_err(|e| format!("{e}; give {flag}").into()),
-    }
-}
-
 pub fn run(dir: &Path, log: &Path, r_start: Option<i64>, v_min: Option<i64>) -> Result<ExitCode> {
     let r_start = match r_start {
         Some(r) => r,
         None => battery::dt_resistance().map_err(|e| format!("{e}; give --r-start"))?,
     };
-    let v_min = or_design(v_min, "voltage_min_design", "--v-min")?;
+    let v_min = match v_min {
+        Some(v) => v,
+        None => battery::dt_voltage_min().map_err(|e| format!("{e}; give --v-min"))?,
+    };
     let raw = fs::read(log).map_err(|e| format!("{}: {e}", log.display()))?;
     let samples: Vec<Sample> = text(&raw).lines().filter_map(sample).collect();
 
