@@ -83,24 +83,87 @@ pub async fn connect() -> Result<(System, mpsc::UnboundedReceiver<Event>)> {
     Ok((system, receive))
 }
 
-/// Any signal of logind: the sessions or the inhibitors may have changed.
+/// The path of the manager of logind.
+const LOGIND_PATH: &str = "/org/freedesktop/login1";
+/// The interface of the manager of logind.
+const LOGIND_MANAGER: &str = "org.freedesktop.login1.Manager";
+/// The signals of the manager for a session that comes or goes.
+const SESSION_SIGNALS: [&str; 2] = ["SessionNew", "SessionRemoved"];
+/// The properties of the manager whose change the service reads logind
+/// for. logind sends `IdleHint` of the manager with that of any session
+/// (notes/logind-interface.md), so no signal of a session is needed.
+const MANAGER_PROPERTIES: [&str; 6] = [
+    "IdleHint",
+    "IdleSinceHint",
+    "IdleSinceHintMonotonic",
+    "BlockInhibited",
+    "BlockWeakInhibited",
+    "LidClosed",
+];
+
+/// The signals of logind for a change the service reads it again for: a
+/// session that comes or goes; the idle hint, the inhibitors or the lid.
+/// Other signals of logind are not received.
 async fn follow_logind(conn: &Connection, send: mpsc::UnboundedSender<Event>) -> Result<()> {
-    let rule = MatchRule::builder()
-        .msg_type(MessageType::Signal)
-        .sender(LOGIND)
-        .build()
-        .map_err(bus("match the signals of logind"))?;
-    let mut stream = MessageStream::for_match_rule(rule, conn, None)
-        .await
-        .map_err(bus("follow the signals of logind"))?;
+    let manager = || {
+        MatchRule::builder()
+            .msg_type(MessageType::Signal)
+            .sender(LOGIND)
+            .path(LOGIND_PATH)
+    };
+    let mut rules = SESSION_SIGNALS
+        .iter()
+        .map(|member| manager().interface(LOGIND_MANAGER).member(*member).build())
+        .collect::<Vec<_>>();
+    rules.push(
+        manager()
+            .interface("org.freedesktop.DBus.Properties")
+            .member("PropertiesChanged")
+            .arg(0, LOGIND_MANAGER)
+            .build(),
+    );
+    let mut streams = Vec::new();
+    for rule in rules {
+        let rule = rule.map_err(bus("match the signals of logind"))?;
+        let stream = MessageStream::for_match_rule(rule, conn, None)
+            .await
+            .map_err(bus("follow the signals of logind"))?;
+        streams.push(stream);
+    }
+    let mut stream = futures_util::stream::select_all(streams);
     tokio::spawn(async move {
-        while stream.next().await.is_some() {
-            if send.send(Event::Login).is_err() {
+        while let Some(message) = stream.next().await {
+            let Ok(message) = message else {
+                continue;
+            };
+            if is_needed_change(&message) && send.send(Event::Login).is_err() {
                 return;
             }
         }
     });
     Ok(())
+}
+
+/// Whether a signal of logind tells a change the service needs: a signal
+/// of a session, or a change of a property of `MANAGER_PROPERTIES`.
+fn is_needed_change(message: &zbus::Message) -> bool {
+    let Some(changed) = fdo::PropertiesChanged::from_message(message.clone()) else {
+        return true;
+    };
+    let Ok(args) = changed.args() else {
+        return true;
+    };
+    let names = args
+        .changed_properties()
+        .keys()
+        .copied()
+        .chain(args.invalidated_properties().iter().copied());
+    names_needed(names)
+}
+
+/// Whether one of these names of properties of the manager is needed.
+fn names_needed<'a>(mut names: impl Iterator<Item = &'a str>) -> bool {
+    names.any(|name| MANAGER_PROPERTIES.contains(&name))
 }
 
 /// logind leaving the bus, and UPower coming or going.
@@ -357,5 +420,24 @@ impl Units for System {
             .await
             .map(|rows| rows.into_iter().map(|row| row.0).collect())
             .unwrap_or_default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_the_idle_hint_the_inhibitors_and_the_lid_are_needed() {
+        assert!(names_needed(["IdleHint"].into_iter()));
+        assert!(names_needed(
+            ["NCurrentInhibitors", "BlockWeakInhibited"].into_iter()
+        ));
+        assert!(names_needed(["LidClosed"].into_iter()));
+        assert!(!names_needed(
+            ["NCurrentInhibitors", "DelayInhibited"].into_iter()
+        ));
+        assert!(!names_needed(["ScheduledShutdown"].into_iter()));
+        assert!(!names_needed(std::iter::empty()));
     }
 }

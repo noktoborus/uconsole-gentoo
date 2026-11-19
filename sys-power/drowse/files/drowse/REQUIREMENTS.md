@@ -29,6 +29,13 @@ source from UPower.
   which fires when logind writes the state of a session again: at once
   when the leader exits, at most 20 s after the logout
   (notes/session-end.md).
+- **The signals of logind** the service reads logind again for:
+  `SessionNew`, `SessionRemoved`, and `PropertiesChanged` of the Manager
+  with `IdleHint`, `IdleSinceHint`, `IdleSinceHintMonotonic`,
+  `BlockInhibited`, `BlockWeakInhibited` or `LidClosed`. It takes no
+  other signal of logind: none of a session, a user or a seat. logind
+  sends `IdleHint` of the Manager with that of any session
+  (notes/logind-interface.md).
 - **Inhibitor of screen and system**: a Wayland idle inhibitor, set by
   hand or by a program (a video player, a browser). The session does not
   become idle, and no action comes. In sway it holds only while its
@@ -70,8 +77,8 @@ An ssh session is never idle for logind, with a terminal or not
 ## The lid
 
 - The service takes it from logind: `LidClosed` of the Manager, read at
-  the start and again on each signal of logind (`PropertiesChanged` is
-  sent on its change, notes/logind-interface.md). With no lid it is
+  the start and again on each signal of logind it takes (`PropertiesChanged`
+  is sent on its change, notes/logind-interface.md). With no lid it is
   `false`.
 - With `lid:` in the file, the lid closed picks the group `lid`, the
   lid open the group `main`. With no `lid:`, the lid is not looked at:
