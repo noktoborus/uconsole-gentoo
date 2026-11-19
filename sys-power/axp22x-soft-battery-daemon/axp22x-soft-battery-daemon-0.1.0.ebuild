@@ -28,7 +28,7 @@ KEYWORDS="arm64"
 
 RDEPEND="sys-power/axp22x-soft-battery"
 
-# files/ sha256: d9f5d7ac3a6f57dcfd378d12f51f4bd8ca68ff5b82e0bdef808c78101a2719a6
+# files/ sha256: 780f176476debd5e05d8d867333d9cee96adf63beedf9abcdbc85544deb03cfe
 
 src_unpack() {
 	cargo_src_unpack

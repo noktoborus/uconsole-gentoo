@@ -20,7 +20,7 @@ KEYWORDS="arm64"
 
 BDEPEND="sys-apps/dtc"
 
-# files/ sha256: e0666d3a3dc67b5ebaea964482f6032bdc002ad189191355b0fcfd4c32ba80e2
+# files/ sha256: 39c6146cfe088500055540dfdb66b2a1d5ef9df30131d307e615e0009f04faa7
 
 CONFIG_CHECK="MFD_AXP20X AXP20X_ADC AXP20X_POWER IIO POWER_SUPPLY"
 ERROR_AXP20X_ADC="the module reads the battery by the IIO channels of axp20x_adc"

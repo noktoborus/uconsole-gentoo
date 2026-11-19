@@ -132,19 +132,31 @@ static void sb_good_sample(struct sb *sb)
 }
 
 /*
- * The status. With the charger in and a small current of the charge, bit
- * 6 of 0x01 tells a charge from its end; the end with the voltage near
- * the target is the full state. Full holds until the charger goes or
- * the PMIC charges again, so the voltage that falls after the end does
- * not turn it back and forth.
+ * The cells give current with the charger in: the charger is too weak
+ * for the load. Only the mean of a full window counts, so one peak of the
+ * load does not. At the full state the cells take a small current, so
+ * the sign is enough.
+ */
+static bool sb_draining(const struct sb *sb, const struct sb_means *m)
+{
+	return sb->n_mean == SB_MEAN_SAMPLES && m->i_ua < 0;
+}
+
+/*
+ * The status. No charger, or the cells give current: a discharge. With
+ * the charger in and a small current of the charge, bit 6 of 0x01 tells
+ * a charge from its end; the end with the voltage near the target is the
+ * full state. Full holds until the charger goes, the PMIC charges again
+ * or the cells give current, so the voltage that falls after the end
+ * does not turn it back and forth.
  */
 static int sb_status(struct sb *sb, bool supplied, const struct sb_sample *s,
-		     int *status)
+		     const struct sb_means *m, int *status)
 {
 	bool charging;
 	int ret;
 
-	if (!supplied) {
+	if (!supplied || sb_draining(sb, m)) {
 		*status = POWER_SUPPLY_STATUS_DISCHARGING;
 		return 0;
 	}
@@ -191,12 +203,13 @@ static struct sb_means sb_add_mean(struct sb *sb, bool supplied,
 	};
 }
 
-/* The level does not rise on a discharge, nor fall on a charge. */
-static int sb_hold_level(struct sb *sb, bool supplied, int level)
+/* The level does not rise on a discharge, nor fall in another status. */
+static int sb_hold_level(struct sb *sb, int status, int level)
 {
 	if (sb->prev_level < 0)
 		return level;
-	return supplied ? max(level, sb->prev_level) : min(level, sb->prev_level);
+	return status == POWER_SUPPLY_STATUS_DISCHARGING ?
+	       min(level, sb->prev_level) : max(level, sb->prev_level);
 }
 
 /* The copy for get_property; true when upower must hear of it. */
@@ -225,6 +238,10 @@ static void sb_tell_events(struct sb *sb, bool supplied, int status, int level,
 		dev_info(sb->dev, "%s\n", supplied ? "charger in" : "charger out");
 	if (status == POWER_SUPPLY_STATUS_FULL && sb->prev_status != status)
 		dev_info(sb->dev, "full: %d mV at %d mA\n", s->v_mv, s->chrg_ma);
+	if (supplied && status == POWER_SUPPLY_STATUS_DISCHARGING &&
+	    sb->prev_status != status)
+		dev_info(sb->dev, "discharge with the charger in: %d mV at %d mA\n",
+			 m->v_uv / 1000, -m->i_ua / 1000);
 	if (level == 0 && !sb->at_zero)
 		dev_info(sb->dev, "level 0 %%: %d mV at %d mA\n",
 			 m->v_uv / 1000, -m->i_ua / 1000);
@@ -245,14 +262,13 @@ static void sb_take_sample(struct sb *sb, const struct sb_sample *s)
 	int status, level;
 
 	supplied = power_supply_am_i_supplied(sb->psy) > 0;
-	if (sb_status(sb, supplied, s, &status)) {
+	m = sb_add_mean(sb, supplied, s);
+	if (sb_status(sb, supplied, s, &m, &status)) {
 		dev_err_ratelimited(sb->dev, "read of 0x01 failed\n");
 		return;
 	}
 
-	m = sb_add_mean(sb, supplied, s);
-	level = sb_hold_level(sb, supplied,
-			      sb_level(sb, status, supplied, m.v_uv, m.i_ua));
+	level = sb_hold_level(sb, status, sb_level(sb, status, m.v_uv, m.i_ua));
 	changed = sb_store(sb, status, level, s) ||
 		  supplied != sb->prev_supplied;
 

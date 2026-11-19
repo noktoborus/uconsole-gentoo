@@ -8,7 +8,8 @@
 //! - A run of a discharge starts when the status leaves Full; it ends when
 //!   the AXP is gone: the run is saved and the system powered off.
 //! - A run of a charge starts when the charger comes in; it ends at Full
-//!   and is saved; the charger out before it cuts it.
+//!   and is saved; a discharge before it cuts it: the charger out, or
+//!   the cells that give current with the charger in.
 //! - Each thing that spoils the count ends the runs: they are printed, a
 //!   discharge is kept in discharge/partial/, and the daemon exits.
 
@@ -308,7 +309,7 @@ impl<'a> Daemon<'a> {
             self.end_charge()?;
         }
         if r.status == Status::Discharging {
-            self.cut_charge("the charger out");
+            self.cut_charge("a discharge");
         }
         if let Some(d) = self.discharge.as_mut() {
             d.add(t, r.status, r.v_uv, -r.i_ua);

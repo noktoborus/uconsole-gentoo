@@ -111,7 +111,7 @@ int sb_setup_pmic(struct sb *sb);
 int sb_read_charging(struct sb *sb, bool *charging);
 
 /* level.c */
-int sb_level(struct sb *sb, int status, bool supplied, int v_uv, int i_ua);
+int sb_level(struct sb *sb, int status, int v_uv, int i_ua);
 
 /* work.c */
 void sb_work(struct work_struct *work);

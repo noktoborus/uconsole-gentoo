@@ -167,10 +167,12 @@ impl FullRule {
         })
     }
 
-    /// The status by the charger, the current and the voltage. Full holds
-    /// until the charger goes or the charge starts again.
+    /// The status by the charger, the current and the voltage. The cells
+    /// that give current with the charger in discharge: the charger is too
+    /// weak for the load. Full holds until the charger goes, the charge
+    /// starts again or the cells give current.
     pub fn status(&self, prev: Option<Status>, online: bool, s: &Sample) -> Status {
-        if !online {
+        if !online || s.i_ua() < 0 {
             Status::Discharging
         } else if s.chrg_ua >= self.current_ua {
             Status::Charging
@@ -251,5 +253,15 @@ mod tests {
         assert_eq!(rule.status(None, true, &at(4140000, 0)), Status::NotCharging);
         assert_eq!(rule.status(Some(Status::Full), true, &at(4140000, 300000)), Status::Charging);
         assert_eq!(rule.status(Some(Status::Full), false, &at(4140000, 0)), Status::Discharging);
+    }
+
+    #[test]
+    fn the_cells_that_give_current_discharge_with_the_charger_in() {
+        let rule = FullRule { current_ua: 100000, full_uv: 4150000 };
+        let out = Sample { v_uv: 4180000, chrg_ua: 0, dischrg_ua: 300000 };
+        let rest = Sample { v_uv: 4180000, chrg_ua: 20000, dischrg_ua: 0 };
+        assert_eq!(rule.status(Some(Status::Full), true, &out), Status::Discharging);
+        assert_eq!(rule.status(None, true, &out), Status::Discharging);
+        assert_eq!(rule.status(Some(Status::Full), true, &rest), Status::Full);
     }
 }
