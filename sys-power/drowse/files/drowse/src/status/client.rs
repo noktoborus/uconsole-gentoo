@@ -34,6 +34,10 @@ trait State {
     /// The power source.
     #[zbus(property)]
     fn power_source(&self) -> zbus::Result<String>;
+
+    /// The lid: `open` or `closed`.
+    #[zbus(property)]
+    fn lid(&self) -> zbus::Result<String>;
 }
 
 /// The object of what holds the system up.
@@ -152,6 +156,7 @@ impl Client {
             state: self.state.state().await?,
             scheduled: self.state.scheduled_action().await?,
             power: self.state.power_source().await?,
+            lid: self.state.lid().await?,
         })
     }
 

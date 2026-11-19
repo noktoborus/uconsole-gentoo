@@ -1,7 +1,8 @@
 /* The colours of the module of drowse in waybar, by its classes: the
    state (active, idle, announced, held, unknown), the hold (own-all,
    own-power, own-idle, other,
-   session-other, session-own, none, hidden), the power (battery, ac). */
+   session-other, session-own, none, hidden), the power (battery, ac),
+   the lid (lid-open, lid-closed, lid-unknown). */
 
 #custom-drowse.announced     { color: #f38ba8; animation: drowse-blink 1s steps(2) infinite; }
 #custom-drowse.held          { color: #f9e2af; }

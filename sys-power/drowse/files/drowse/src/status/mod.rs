@@ -30,6 +30,8 @@ pub struct ServiceState {
     pub scheduled: (String, u64),
     /// `battery`, `ac` or `unknown`.
     pub power: String,
+    /// `open` or `closed`.
+    pub lid: String,
 }
 
 /// What the tool read.
@@ -55,8 +57,8 @@ pub struct Shown {
     pub text: String,
     /// What matters most now.
     pub alt: &'static str,
-    /// The state, the hold, the power.
-    pub class: [&'static str; 3],
+    /// The state, the hold, the power, the lid.
+    pub class: [&'static str; 4],
     /// The lines of the tooltip.
     pub tooltip: Vec<String>,
     /// When the line must be written again though nothing changed.
@@ -117,7 +119,7 @@ pub fn show(observed: &Observed, now: u64, user_of: &dyn Fn(u32) -> String) -> S
         return Shown {
             text: String::new(),
             alt: "unknown",
-            class: ["unknown", observed.hold(), "ac"],
+            class: ["unknown", observed.hold(), "ac", "lid-unknown"],
             tooltip: vec![t!("status.not_running").into_owned()],
             again_in: None,
         };
@@ -166,10 +168,16 @@ pub fn show(observed: &Observed, now: u64, user_of: &dyn Fn(u32) -> String) -> S
         _ => holders(observed, user_of),
     };
     tooltip.push(power_line(&service.power));
+    let lid = if service.lid == "closed" {
+        tooltip.push(t!("status.lid_closed").into_owned());
+        "lid-closed"
+    } else {
+        "lid-open"
+    };
     Shown {
         text,
         alt,
-        class: [state, hold, power],
+        class: [state, hold, power, lid],
         tooltip,
         again_in: left.map(again_in),
     }

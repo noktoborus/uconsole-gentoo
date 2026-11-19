@@ -10,6 +10,7 @@ fn service(state: &str, at: u64) -> ServiceState {
         state: state.to_owned(),
         scheduled: (if at > 0 { "poweroff" } else { "" }.to_owned(), at),
         power: "battery".to_owned(),
+        lid: "open".to_owned(),
     }
 }
 
@@ -83,7 +84,7 @@ fn not_running() {
     let _language = english();
     let shown = show(&observed(None), 0, &name);
     assert_eq!(shown.alt, "unknown");
-    assert_eq!(shown.class, ["unknown", "none", "ac"]);
+    assert_eq!(shown.class, ["unknown", "none", "ac", "lid-unknown"]);
     assert_eq!(shown.tooltip, ["drowsed is not running"]);
 }
 
@@ -97,7 +98,7 @@ fn planned() {
     );
     assert_eq!(shown.text, "14 min");
     assert_eq!(shown.alt, "idle");
-    assert_eq!(shown.class, ["idle", "none", "battery"]);
+    assert_eq!(shown.class, ["idle", "none", "battery", "lid-open"]);
     assert_eq!(shown.tooltip, ["planned poweroff in 14 min", "On battery"]);
     assert_eq!(shown.again_in, Some(Duration::from_secs(60)));
 }
@@ -136,7 +137,7 @@ fn held_entry_shows_what_waits_and_what_holds_it() {
     let shown = show(&seen, 0, &name);
     assert_eq!(shown.text, "");
     assert_eq!(shown.alt, "held");
-    assert_eq!(shown.class, ["held", "own-power", "battery"]);
+    assert_eq!(shown.class, ["held", "own-power", "battery", "lid-open"]);
     assert_eq!(
         shown.tooltip,
         [
@@ -171,7 +172,7 @@ fn awake_held_by_many() {
     seen.inhibitors = vec![inhibitor("systemd-inhibit", "backup", 1001)];
     let shown = show(&seen, 0, &name);
     assert_eq!(shown.alt, "other");
-    assert_eq!(shown.class, ["active", "other", "battery"]);
+    assert_eq!(shown.class, ["active", "other", "battery", "lid-open"]);
     assert_eq!(
         shown.tooltip,
         [
@@ -253,7 +254,7 @@ fn json_for_waybar() {
     let line = show(&seen, 0, &name).waybar();
     assert_eq!(
         line,
-        "{\"text\":\"\",\"alt\":\"other\",\"class\":[\"active\",\"other\",\"battery\"],\"tooltip\":\"awake, held by:\\n - &lt;b&gt;\\\"a\\\" &amp; b&lt;/b&gt; by bob\\nOn battery\"}"
+        "{\"text\":\"\",\"alt\":\"other\",\"class\":[\"active\",\"other\",\"battery\",\"lid-open\"],\"tooltip\":\"awake, held by:\\n - &lt;b&gt;\\\"a\\\" &amp; b&lt;/b&gt; by bob\\nOn battery\"}"
     );
 }
 
@@ -267,4 +268,16 @@ fn russian() {
     );
     assert_eq!(shown.text, "14 мин");
     assert_eq!(shown.tooltip[1], "От батареи");
+}
+
+#[test]
+fn a_closed_lid_has_a_line_and_a_class() {
+    let _language = english();
+    let mut state = service("idle", 14 * MINUTE);
+    state.lid = "closed".to_owned();
+    let shown = show(&observed(Some(state)), 0, &name);
+    assert_eq!(shown.class[3], "lid-closed");
+    assert_eq!(shown.tooltip.last().map(String::as_str), Some("Lid closed"));
+    let shown = show(&observed(Some(service("idle", 14 * MINUTE))), 0, &name);
+    assert!(!shown.tooltip.iter().any(|line| line.contains("Lid")));
 }
