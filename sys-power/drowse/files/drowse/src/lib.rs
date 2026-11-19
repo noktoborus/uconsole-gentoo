@@ -3,6 +3,7 @@
 //! arguments and runs this library.
 
 pub mod bus;
+pub mod changes;
 pub mod engine;
 pub mod error;
 pub mod inhibit;

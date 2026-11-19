@@ -10,6 +10,7 @@ use super::logind::{ManagerProxy as LogindProxy, SessionProxy};
 use super::systemd::ManagerProxy as SystemdProxy;
 use super::upower::UPowerProxy;
 use super::{Event, Inhibitor, Login, Power, PowerSource, Refusal, Session, SessionState, Units};
+use crate::changes;
 use crate::error::{Error, Result};
 use crate::login::SessionMonitor;
 use crate::settings::LogindAction;
@@ -105,31 +106,22 @@ const MANAGER_PROPERTIES: [&str; 6] = [
 /// session that comes or goes; the idle hint, the inhibitors or the lid.
 /// Other signals of logind are not received.
 async fn follow_logind(conn: &Connection, send: mpsc::UnboundedSender<Event>) -> Result<()> {
-    let manager = || {
-        MatchRule::builder()
+    let mut streams = Vec::new();
+    for member in SESSION_SIGNALS {
+        let rule = MatchRule::builder()
             .msg_type(MessageType::Signal)
             .sender(LOGIND)
             .path(LOGIND_PATH)
-    };
-    let mut rules = SESSION_SIGNALS
-        .iter()
-        .map(|member| manager().interface(LOGIND_MANAGER).member(*member).build())
-        .collect::<Vec<_>>();
-    rules.push(
-        manager()
-            .interface("org.freedesktop.DBus.Properties")
-            .member("PropertiesChanged")
-            .arg(0, LOGIND_MANAGER)
-            .build(),
-    );
-    let mut streams = Vec::new();
-    for rule in rules {
-        let rule = rule.map_err(bus("match the signals of logind"))?;
+            .interface(LOGIND_MANAGER)
+            .member(member)
+            .build()
+            .map_err(bus("match the signals of logind"))?;
         let stream = MessageStream::for_match_rule(rule, conn, None)
             .await
             .map_err(bus("follow the signals of logind"))?;
         streams.push(stream);
     }
+    streams.push(changes::follow(conn, LOGIND, Some(LOGIND_PATH), LOGIND_MANAGER).await?);
     let mut stream = futures_util::stream::select_all(streams);
     tokio::spawn(async move {
         while let Some(message) = stream.next().await {
@@ -147,18 +139,7 @@ async fn follow_logind(conn: &Connection, send: mpsc::UnboundedSender<Event>) ->
 /// Whether a signal of logind tells a change the service needs: a signal
 /// of a session, or a change of a property of `MANAGER_PROPERTIES`.
 fn is_needed_change(message: &zbus::Message) -> bool {
-    let Some(changed) = fdo::PropertiesChanged::from_message(message.clone()) else {
-        return true;
-    };
-    let Ok(args) = changed.args() else {
-        return true;
-    };
-    let names = args
-        .changed_properties()
-        .keys()
-        .copied()
-        .chain(args.invalidated_properties().iter().copied());
-    names_needed(names)
+    changes::read(message).is_none_or(|changed| names_needed(changed.names()))
 }
 
 /// Whether one of these names of properties of the manager is needed.

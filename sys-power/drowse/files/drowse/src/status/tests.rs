@@ -9,6 +9,7 @@ fn service(state: &str, at: u64) -> ServiceState {
     ServiceState {
         state: state.to_owned(),
         scheduled: (if at > 0 { "poweroff" } else { "" }.to_owned(), at),
+        next_held: false,
         power: "battery".to_owned(),
         lid: "open".to_owned(),
     }
@@ -146,6 +147,43 @@ fn held_entry_shows_what_waits_and_what_holds_it() {
             "On battery"
         ]
     );
+}
+
+#[test]
+fn a_planned_entry_says_who_may_hold_it() {
+    let _language = english();
+    let mut seen = observed(Some(service("idle", 10 * MINUTE)));
+    seen.service.as_mut().unwrap().next_held = true;
+    seen.inhibitors = vec![inhibitor("drowse-inhibit", "held by hand", 1000)];
+    seen.held_inhibitors = seen.inhibitors.clone();
+    let shown = show(&seen, 0, &name);
+    assert_eq!(
+        shown.tooltip,
+        [
+            "planned poweroff in 10 min",
+            "may be held by:",
+            " - power: held by hand by alice",
+            "On battery"
+        ]
+    );
+}
+
+#[test]
+fn a_planned_entry_says_only_that_it_may_be_held_to_who_may_not_read_who() {
+    let _language = english();
+    let mut seen = observed(Some(service("announced", 2 * MINUTE)));
+    seen.service.as_mut().unwrap().next_held = true;
+    seen.sessions = None;
+    let shown = show(&seen, 0, &name);
+    assert_eq!(shown.tooltip[1], "may be held");
+}
+
+#[test]
+fn a_planned_entry_held_by_nothing_says_nothing_of_a_hold() {
+    let _language = english();
+    let seen = observed(Some(service("idle", 10 * MINUTE)));
+    let shown = show(&seen, 0, &name);
+    assert_eq!(shown.tooltip, ["planned poweroff in 10 min", "On battery"]);
 }
 
 #[test]

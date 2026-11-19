@@ -28,6 +28,8 @@ pub struct ServiceState {
     pub state: String,
     /// The action of the next stage and when it comes.
     pub scheduled: (String, u64),
+    /// Whether an inhibitor holds the entry into the next section now.
+    pub next_held: bool,
     /// `battery`, `ac` or `unknown`.
     pub power: String,
     /// `open` or `closed`.
@@ -44,7 +46,8 @@ pub struct Observed {
     pub sessions: Option<Vec<SessionRow>>,
     /// The inhibitors of logind that hold the system up.
     pub inhibitors: Vec<Inhibitor>,
-    /// The inhibitors that hold the due entry.
+    /// The inhibitors that hold the entry into the next section now; none
+    /// when this user may not read them.
     pub held_inhibitors: Vec<Inhibitor>,
     /// The uid of the user of the tool.
     pub uid: u32,
@@ -155,10 +158,16 @@ pub fn show(observed: &Observed, now: u64, user_of: &dyn Fn(u32) -> String) -> S
     let mut tooltip = match (state, left) {
         ("held", _) => held_tooltip(observed, action, user_of),
         ("announced", Some(left)) => {
-            vec![t!("status.announced", action = action, left = time_left(left)).into_owned()]
+            let mut lines =
+                vec![t!("status.announced", action = action, left = time_left(left)).into_owned()];
+            lines.extend(may_be_held(observed, service, user_of));
+            lines
         }
         ("idle", Some(left)) => {
-            vec![t!("status.planned", action = action, left = time_left(left)).into_owned()]
+            let mut lines =
+                vec![t!("status.planned", action = action, left = time_left(left)).into_owned()];
+            lines.extend(may_be_held(observed, service, user_of));
+            lines
         }
         ("idle", None) => vec![t!("status.idle_nothing").into_owned()],
         ("announced", None) if !observed.held_inhibitors.is_empty() => {
@@ -185,6 +194,29 @@ pub fn show(observed: &Observed, now: u64, user_of: &dyn Fn(u32) -> String) -> S
 
 fn held_tooltip(observed: &Observed, action: &str, user_of: &dyn Fn(u32) -> String) -> Vec<String> {
     let mut lines = vec![t!("status.held", action = action).into_owned()];
+    lines.extend(
+        observed
+            .held_inhibitors
+            .iter()
+            .map(|inhibitor| format!(" - {}", inhibitor_line(inhibitor, user_of))),
+    );
+    lines
+}
+
+/// The lines of a hold of the next section while its time runs: who holds
+/// it, or, when this user may not read who, only that it is held.
+fn may_be_held(
+    observed: &Observed,
+    service: &ServiceState,
+    user_of: &dyn Fn(u32) -> String,
+) -> Vec<String> {
+    if !service.next_held {
+        return Vec::new();
+    }
+    if observed.held_inhibitors.is_empty() {
+        return vec![t!("status.may_be_held").into_owned()];
+    }
+    let mut lines = vec![t!("status.may_be_held_by").into_owned()];
     lines.extend(
         observed
             .held_inhibitors

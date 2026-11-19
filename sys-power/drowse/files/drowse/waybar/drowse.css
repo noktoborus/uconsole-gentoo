@@ -5,7 +5,7 @@
    the lid (lid-open, lid-closed, lid-unknown). */
 
 #custom-drowse.announced     { color: #f38ba8; animation: drowse-blink 1s steps(2) infinite; }
-#custom-drowse.held          { color: #f9e2af; }
+#custom-drowse.held          { color: #f9e2af; animation: drowse-blink 1s steps(2) infinite; }
 #custom-drowse.own-all       { color: #a6e3a1; }
 #custom-drowse.own-power     { color: #f9e2af; }
 #custom-drowse.own-idle      { color: #a6e3a1; }

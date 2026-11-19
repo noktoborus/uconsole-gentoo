@@ -1,199 +1,271 @@
-//! drowse-status on the bus: it reads the state of the service and the
-//! inhibitors of logind, and follows their changes.
+//! drowse-status on the bus. It reads the state of the service and the
+//! inhibitors of logind once; then it keeps the values that the signals of
+//! the service carry. It reads again only what a signal does not carry:
+//! the service that came back on the bus, a property invalidated, the
+//! inhibitors of logind changed.
 
+use std::collections::HashMap;
 use std::time::Duration;
 
 use futures_util::stream::{self, BoxStream};
 use futures_util::{FutureExt, StreamExt};
 use rustix::process::getuid;
-use zbus::message::Type as MessageType;
-use zbus::{Connection, MatchRule, MessageStream, fdo, proxy};
+use zbus::names::InterfaceName;
+use zbus::{Connection, Message, OwnedVariant, fdo};
 
 use super::{Observed, ServiceState, show};
-use crate::bus::{NAME, SessionRow};
+use crate::bus::{HELD_PATH, InhibitorRow, NAME, PATH, SessionRow};
+use crate::changes::{self, Changed};
 use crate::error::{Error, Result};
 use crate::service::{Clock, Monotonic};
 use crate::world::Inhibitor;
 use crate::world::logind::ManagerProxy;
 
-/// The object of the state of the service.
-#[proxy(
-    interface = "io.github.noktoborus.Drowse",
-    default_service = "io.github.noktoborus.Drowse",
-    default_path = "/io/github/noktoborus/Drowse"
-)]
-trait State {
-    /// The state.
-    #[zbus(property)]
-    fn state(&self) -> zbus::Result<String>;
+/// The name of logind on the bus.
+const LOGIND: &str = "org.freedesktop.login1";
+/// The path of the manager of logind.
+const LOGIND_PATH: &str = "/org/freedesktop/login1";
+/// The interface of the manager of logind.
+const LOGIND_MANAGER: &str = "org.freedesktop.login1.Manager";
+/// The properties of the manager of logind sent at each inhibitor of mode
+/// `block` or `block-weak` taken or let go (notes/logind-interface.md).
+const BLOCK_PROPERTIES: [&str; 2] = ["BlockInhibited", "BlockWeakInhibited"];
 
-    /// The action of the next stage and when it comes.
-    #[zbus(property)]
-    fn scheduled_action(&self) -> zbus::Result<(String, u64)>;
-
-    /// The power source.
-    #[zbus(property)]
-    fn power_source(&self) -> zbus::Result<String>;
-
-    /// The lid: `open` or `closed`.
-    #[zbus(property)]
-    fn lid(&self) -> zbus::Result<String>;
-}
-
-/// The object of what holds the system up.
-#[proxy(
-    interface = "io.github.noktoborus.Drowse",
-    default_service = "io.github.noktoborus.Drowse",
-    default_path = "/io/github/noktoborus/Drowse/HeldBy"
-)]
-trait Held {
-    /// The sessions that hold the system up.
-    #[zbus(property)]
-    fn held_by_sessions(&self) -> zbus::Result<Vec<SessionRow>>;
-
-    /// The inhibitors that hold a due entry.
-    #[zbus(property)]
-    fn held_by_inhibitors(&self) -> zbus::Result<Vec<(String, String, String, String, u32, u32)>>;
-}
+/// The properties of one object, by name.
+type Properties = HashMap<String, OwnedVariant>;
 
 /// Wraps an error of the bus with what was done.
 fn bus(what: &'static str) -> impl FnOnce(zbus::Error) -> Error {
     move |source| Error::Bus { what, source }
 }
 
-/// The tool on the system bus.
+/// A change the tool follows.
+enum Change {
+    /// A signal `PropertiesChanged` of the service.
+    Service(Message),
+    /// The service came on the bus (true) or left it (false).
+    Owner(bool),
+    /// An inhibitor of logind of mode `block` or `block-weak` was taken or
+    /// let go.
+    Inhibitors,
+}
+
+/// What the tool keeps between two changes.
+#[derive(Default)]
+struct Kept {
+    /// The properties of the state; none when the service is not there.
+    state: Option<Properties>,
+    /// The properties of what holds the system up; none when the service
+    /// is not there or this user may not read them.
+    held: Option<Properties>,
+    /// The inhibitors of logind that hold the system up.
+    inhibitors: Vec<Inhibitor>,
+}
+
+impl Kept {
+    /// What to show, as the tool read it.
+    fn observed(&self) -> Observed {
+        let service = self.state.as_ref().and_then(service_state);
+        let (sessions, held_inhibitors) = match (&service, &self.held) {
+            (None, _) => (Some(Vec::new()), Vec::new()),
+            (Some(_), None) => (None, Vec::new()),
+            (Some(_), Some(held)) => (
+                value::<Vec<SessionRow>>(held, "HeldBySessions"),
+                value::<Vec<InhibitorRow>>(held, "HeldByInhibitors")
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(inhibitor_of)
+                    .collect(),
+            ),
+        };
+        Observed {
+            service,
+            sessions,
+            inhibitors: self.inhibitors.clone(),
+            held_inhibitors,
+            uid: getuid().as_raw(),
+        }
+    }
+
+    /// The properties of the object at this path.
+    fn object(&mut self, path: &str) -> Option<&mut Option<Properties>> {
+        match path {
+            PATH => Some(&mut self.state),
+            HELD_PATH => Some(&mut self.held),
+            _ => None,
+        }
+    }
+}
+
+/// One property, of the type it has on the bus.
+fn value<T: TryFrom<OwnedVariant>>(properties: &Properties, name: &str) -> Option<T> {
+    T::try_from(properties.get(name)?.try_clone().ok()?).ok()
+}
+
+/// The state of the service, from the properties of its object.
+fn service_state(properties: &Properties) -> Option<ServiceState> {
+    Some(ServiceState {
+        state: value(properties, "State")?,
+        scheduled: value(properties, "ScheduledAction")?,
+        next_held: value(properties, "NextHeld")?,
+        power: value(properties, "PowerSource")?,
+        lid: value(properties, "Lid")?,
+    })
+}
+
+/// An inhibitor, from a row of logind or of the service.
+fn inhibitor_of((what, who, why, mode, uid, pid): InhibitorRow) -> Inhibitor {
+    Inhibitor {
+        what,
+        who,
+        why,
+        mode,
+        uid,
+        pid,
+    }
+}
+
+/// The connection and the proxies of the tool.
 struct Client {
     conn: Connection,
     logind: ManagerProxy<'static>,
-    state: StateProxy<'static>,
-    held: HeldProxy<'static>,
 }
 
 impl Client {
-    /// Connects to the system bus.
     async fn connect() -> Result<Self> {
         let conn = Connection::system()
             .await
             .map_err(bus("connect to the system bus"))?;
-        let logind = ManagerProxy::new(&conn)
+        let logind = ManagerProxy::builder(&conn)
+            .cache_properties(zbus::proxy::CacheProperties::No)
+            .build()
             .await
             .map_err(bus("make the proxy of logind"))?;
-        let state = StateProxy::builder(&conn)
-            .cache_properties(zbus::proxy::CacheProperties::No)
-            .build()
-            .await
-            .map_err(bus("make the proxy of the service"))?;
-        let held = HeldProxy::builder(&conn)
-            .cache_properties(zbus::proxy::CacheProperties::No)
-            .build()
-            .await
-            .map_err(bus("make the proxy of the service"))?;
-        Ok(Self {
-            conn,
-            logind,
-            state,
-            held,
-        })
+        Ok(Self { conn, logind })
     }
 
-    /// Reads all the tool shows. The service not there, or `HeldBy` not
-    /// open to this user, is no error.
-    async fn observe(&self) -> Result<Observed> {
-        let service = self.service().await.ok();
-        let sessions = if service.is_some() {
-            self.held.held_by_sessions().await.ok()
-        } else {
-            Some(Vec::new())
-        };
-        let held_rows = if service.is_some() {
-            self.held.held_by_inhibitors().await.unwrap_or_default()
-        } else {
-            Vec::new()
-        };
+    /// Every property of an object of the service; none when the service is
+    /// not there or this user may not read it.
+    async fn properties(&self, path: &'static str) -> Option<Properties> {
+        let proxy = fdo::PropertiesProxy::builder(&self.conn)
+            .destination(NAME)
+            .path(path)
+            .cache_properties(zbus::proxy::CacheProperties::No)
+            .build()
+            .await
+            .ok()?;
+        proxy
+            .get_all(InterfaceName::from_static_str_unchecked(NAME))
+            .await
+            .ok()
+    }
+
+    /// The inhibitors of logind of mode `block` or `block-weak` that hold a
+    /// kind drowse looks at.
+    async fn inhibitors(&self) -> Result<Vec<Inhibitor>> {
         let rows = self
             .logind
             .list_inhibitors()
             .await
             .map_err(bus("list the inhibitors of logind"))?;
-        let inhibitors: Vec<Inhibitor> = rows
+        Ok(rows
             .into_iter()
-            .map(|(what, who, why, mode, uid, pid)| Inhibitor {
-                what,
-                who,
-                why,
-                mode,
-                uid,
-                pid,
-            })
+            .map(inhibitor_of)
             .filter(|inhibitor| {
                 matches!(inhibitor.mode.as_str(), "block" | "block-weak")
                     && !inhibitor.holds().is_empty()
             })
-            .collect();
-        let held_inhibitors = held_rows
-            .into_iter()
-            .map(|(what, who, why, mode, uid, pid)| Inhibitor {
-                what,
-                who,
-                why,
-                mode,
-                uid,
-                pid,
-            })
-            .collect();
-        Ok(Observed {
-            service,
-            sessions,
-            inhibitors,
-            held_inhibitors,
-            uid: getuid().as_raw(),
+            .collect())
+    }
+
+    /// Reads all the tool shows. The service not there, or `HeldBy` not
+    /// open to this user, is no error.
+    async fn read(&self) -> Result<Kept> {
+        Ok(Kept {
+            state: self.properties(PATH).await,
+            held: self.properties(HELD_PATH).await,
+            inhibitors: self.inhibitors().await?,
         })
     }
 
-    /// The state of the service.
-    async fn service(&self) -> zbus::Result<ServiceState> {
-        Ok(ServiceState {
-            state: self.state.state().await?,
-            scheduled: self.state.scheduled_action().await?,
-            power: self.state.power_source().await?,
-            lid: self.state.lid().await?,
-        })
+    /// Takes a change into what the tool keeps.
+    async fn apply(&self, kept: &mut Kept, change: Change) -> Result<()> {
+        match change {
+            Change::Service(message) => self.apply_service(kept, &message).await,
+            Change::Owner(true) => {
+                kept.state = self.properties(PATH).await;
+                kept.held = self.properties(HELD_PATH).await;
+            }
+            Change::Owner(false) => {
+                kept.state = None;
+                kept.held = None;
+            }
+            Change::Inhibitors => kept.inhibitors = self.inhibitors().await?,
+        }
+        Ok(())
     }
 
-    /// Every change to read again for: a signal of logind, a signal of the
-    /// service, the service coming or going on the bus.
-    async fn changes(&self) -> Result<BoxStream<'static, ()>> {
-        let logind = signals_of(&self.conn, "org.freedesktop.login1").await?;
-        let service = signals_of(&self.conn, NAME).await?;
+    /// Takes the values of a signal of the service; reads the object again
+    /// when the signal does not carry them all.
+    async fn apply_service(&self, kept: &mut Kept, message: &Message) {
+        let header = message.header();
+        let Some(path) = header.path().map(|path| path.as_str().to_owned()) else {
+            return;
+        };
+        let Some(path) = [PATH, HELD_PATH].into_iter().find(|known| *known == path) else {
+            return;
+        };
+        let changed = changes::read(message).unwrap_or_default();
+        let Some(object) = kept.object(path) else {
+            return;
+        };
+        match object {
+            Some(properties) if changed.invalidated.is_empty() => {
+                properties.extend(changed.values);
+            }
+            _ => *object = self.properties(path).await,
+        }
+    }
+
+    /// Every change the tool follows. The bus sends only these: the changes
+    /// of the service, its name coming or going, and the changes of the
+    /// manager of logind, of which only those of its inhibitors count.
+    async fn changes(&self) -> Result<BoxStream<'static, Change>> {
+        let service = changes::follow(&self.conn, NAME, None, NAME).await?;
+        let logind = changes::follow(&self.conn, LOGIND, Some(LOGIND_PATH), LOGIND_MANAGER).await?;
         let names = fdo::DBusProxy::new(&self.conn)
             .await
             .map_err(bus("make the proxy of the bus"))?
-            .receive_name_owner_changed()
+            .receive_name_owner_changed_with_args(&[(0, NAME)])
             .await
-            .map_err(bus("follow the names on the bus"))?
-            .filter(|signal| {
-                let ours = signal.args().is_ok_and(|args| args.name().as_str() == NAME);
-                std::future::ready(ours)
-            });
+            .map_err(bus("follow the name of the service"))?;
         Ok(stream::select_all([
-            logind.map(drop).boxed(),
-            service.map(drop).boxed(),
-            names.map(drop).boxed(),
+            service
+                .filter_map(|message| std::future::ready(message.ok().map(Change::Service)))
+                .boxed(),
+            logind
+                .filter_map(|message| {
+                    let ours = message
+                        .ok()
+                        .and_then(|message| changes::read(&message))
+                        .is_some_and(|changed| block_changed(&changed));
+                    std::future::ready(ours.then_some(Change::Inhibitors))
+                })
+                .boxed(),
+            names
+                .filter_map(|signal| {
+                    let owner = signal.args().ok().map(|args| args.new_owner().is_some());
+                    std::future::ready(owner.map(Change::Owner))
+                })
+                .boxed(),
         ])
         .boxed())
     }
 }
 
-/// The signals sent by a name on the bus.
-async fn signals_of(conn: &Connection, sender: &'static str) -> Result<MessageStream> {
-    let rule = MatchRule::builder()
-        .msg_type(MessageType::Signal)
-        .sender(sender)
-        .build()
-        .map_err(bus("match the signals"))?;
-    MessageStream::for_match_rule(rule, conn, None)
-        .await
-        .map_err(bus("follow the signals"))
+/// Whether a change of the manager of logind is one of its inhibitors.
+fn block_changed(changed: &Changed) -> bool {
+    changed.names().any(|name| BLOCK_PROPERTIES.contains(&name))
 }
 
 /// The name of a user, by the databases of the system (NSS: `/etc/passwd`,
@@ -222,10 +294,10 @@ pub async fn run(form: Form, follow: bool) -> Result<()> {
     } else {
         None
     };
+    let mut kept = client.read().await?;
     let mut last: Option<String> = None;
     loop {
-        let observed = client.observe().await?;
-        let shown = show(&observed, Monotonic.now(), &user_name);
+        let shown = show(&kept.observed(), Monotonic.now(), &user_name);
         let line = match form {
             Form::Plain => shown.plain(),
             Form::Waybar => shown.waybar(),
@@ -243,12 +315,33 @@ pub async fn run(form: Form, follow: bool) -> Result<()> {
         };
         tokio::select! {
             change = changes.next() => {
-                if change.is_none() {
+                let Some(change) = change else {
                     return Ok(());
-                }
-                tokio::time::sleep(SETTLE).await;
+                };
+                client.apply(&mut kept, change).await?;
+                settle(&client, &mut kept, changes).await?;
             }
             () = tick => {}
+        }
+    }
+}
+
+/// Takes the changes that follow within `SETTLE`, so a burst of signals
+/// gives one line.
+async fn settle(
+    client: &Client,
+    kept: &mut Kept,
+    changes: &mut BoxStream<'static, Change>,
+) -> Result<()> {
+    let deadline = tokio::time::sleep(SETTLE);
+    tokio::pin!(deadline);
+    loop {
+        tokio::select! {
+            change = changes.next() => match change {
+                Some(change) => client.apply(kept, change).await?,
+                None => return Ok(()),
+            },
+            () = &mut deadline => return Ok(()),
         }
     }
 }

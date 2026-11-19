@@ -264,7 +264,8 @@ the user, a panel) reads it there and does not work it out again.
 | `State` | `s`: `active` (a counted session is in use), `idle` (the time runs), `announced` (the warning runs or waits for a held entry), `held` (a held entry with no announce) |
 | `ScheduledAction` | `(st)`: the hint of the next section and when it comes; time is 0 when a due entry waits, or `("", 0)` when none comes |
 | `HeldBySessions` | `a(sussss)`: the sessions that hold the system up; on the object `/io/github/noktoborus/Drowse/HeldBy` |
-| `HeldByInhibitors` | `a(ssssuu)`: the inhibitors holding the due entry, in the form of `ListInhibitors()` of logind: what, who, why, mode, uid, pid; on the object `/io/github/noktoborus/Drowse/HeldBy` |
+| `NextHeld` | `b`: whether an inhibitor holds the entry into the next section now; false when the system is in use or no section comes |
+| `HeldByInhibitors` | `a(ssssuu)`: the inhibitors that hold the entry into the next section now, in the form of `ListInhibitors()` of logind: what, who, why, mode, uid, pid; on the object `/io/github/noktoborus/Drowse/HeldBy` |
 | `PowerSource` | `s`: `battery`, `ac`, or `unknown` when UPower does not answer (the power is then taken as AC) |
 | `Lid` | `s`: `open` or `closed`, as logind says; `open` with no lid |
 
@@ -272,21 +273,29 @@ the user, a panel) reads it there and does not work it out again.
 - A session in `HeldBySessions` has the fields of logind as they are:
   id, uid, user, type, tty, remote host. The service gives no kind of
   its own.
-- In `active`, `HeldBySessions` has the sessions that are not idle. In
-  `held`, or `announced` while entry waits, `HeldByInhibitors` has the
-  inhibitors that hold it. Both are empty otherwise. Only the modes
-  `block` and `block-weak`, never `delay`.
+- In `active`, `HeldBySessions` has the sessions that are not idle; it
+  is empty otherwise. In `idle`, `announced` and `held`,
+  `HeldByInhibitors` has the inhibitors of the kind of the next section
+  (see "An inhibitor of system"), while its time runs and while its
+  entry waits; it is empty in `active`. Only the modes `block` and
+  `block-weak`, never `delay`. `NextHeld` is true when
+  `HeldByInhibitors` is not empty: a user not in `wheel` learns that
+  the entry is held, not who holds it.
 - A console that becomes idle sends no signal (notes/logind-interface.md).
   So a console can stay in `HeldBySessions` after it is idle, up to the
   next signal or time of the service.
 - One change of the state sends one `PropertiesChanged` per object, with
   every property of it that changed.
+- A reader reads every property once (`GetAll`), then keeps the values
+  that `PropertiesChanged` carries. It reads an object again only when a
+  property is invalidated, or when the service comes on the bus again.
 - When the service is not on the bus (a restart), a reader shows the
-  state as not known. It follows the name by `NameOwnerChanged`.
+  state as not known. It follows the name by `NameOwnerChanged`, with
+  a match of the name only (`arg0`).
 - The name and the interface are `io.github.noktoborus.Drowse`. Two
   objects:
   - `/io/github/noktoborus/Drowse`: `State`, `ScheduledAction`,
-    `PowerSource`, `Lid`.
+    `NextHeld`, `PowerSource`, `Lid`.
     Anyone may read it: every user can learn of an action to come.
   - `/io/github/noktoborus/Drowse/HeldBy`: `HeldBySessions`,
     `HeldByInhibitors`. Only the group `wheel` may read it.

@@ -64,7 +64,8 @@ pub struct View {
     pub scheduled: (String, u64),
     /// The sessions that hold the system up.
     pub sessions: Vec<Session>,
-    /// The inhibitors that hold the system up.
+    /// The inhibitors that hold the entry into the next section now, while
+    /// the system is idle; none when it is in use.
     pub inhibitors: Vec<Inhibitor>,
     /// The power source.
     pub power: PowerSource,
@@ -339,8 +340,8 @@ impl Engine {
 
     /// What the service publishes now.
     pub fn view(&self) -> View {
-        let (state, sessions, inhibitors) = match self.phase {
-            Phase::Active => (State::Active, self.sessions_in_use(), Vec::new()),
+        let state = match self.phase {
+            Phase::Active => State::Active,
             Phase::Announced { .. }
             | Phase::Waiting {
                 announced: true, ..
@@ -350,18 +351,10 @@ impl Engine {
             }
             | Phase::Held {
                 announced: true, ..
-            } => (State::Announced, Vec::new(), self.held_inhibitors()),
+            } => State::Announced,
             Phase::Held {
-                stage,
-                announced: false,
-                ..
-            } => (
-                State::Held,
-                Vec::new(),
-                self.sections().get(stage).map_or_else(Vec::new, |section| {
-                    held_by(section, &self.snapshot.inhibitors)
-                }),
-            ),
+                announced: false, ..
+            } => State::Held,
             Phase::Counting { .. }
             | Phase::Waiting {
                 announced: false, ..
@@ -369,20 +362,38 @@ impl Engine {
             | Phase::Ready {
                 announced: false, ..
             }
-            | Phase::Done => (State::Idle, Vec::new(), Vec::new()),
+            | Phase::Done => State::Idle,
+        };
+        let sessions = if state == State::Active {
+            self.sessions_in_use()
+        } else {
+            Vec::new()
         };
         View {
             state,
             scheduled: self.scheduled(),
             sessions,
-            inhibitors,
+            inhibitors: self.next_held_by(),
             power: self.power,
             lid_closed: self.lid_closed,
         }
     }
 
-    fn held_inhibitors(&self) -> Vec<Inhibitor> {
-        let Phase::Held { stage, .. } = self.phase else {
+    /// The stage entered next, while the system is idle.
+    fn next_stage(&self) -> Option<usize> {
+        match self.phase {
+            Phase::Counting { stage, .. }
+            | Phase::Announced { stage, .. }
+            | Phase::Waiting { stage, .. }
+            | Phase::Ready { stage, .. }
+            | Phase::Held { stage, .. } => Some(stage),
+            Phase::Active | Phase::Done => None,
+        }
+    }
+
+    /// The inhibitors that hold the entry into the next section now.
+    fn next_held_by(&self) -> Vec<Inhibitor> {
+        let Some(stage) = self.next_stage() else {
             return Vec::new();
         };
         self.sections().get(stage).map_or_else(Vec::new, |section| {

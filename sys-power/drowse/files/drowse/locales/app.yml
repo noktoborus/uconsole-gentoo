@@ -45,6 +45,12 @@ status.announced:
 status.held:
   en: "waiting to enter %{action}, held by:"
   ru: "ожидает входа в %{action}, удерживают:"
+status.may_be_held_by:
+  en: "may be held by:"
+  ru: "может быть удержано:"
+status.may_be_held:
+  en: "may be held"
+  ru: "может быть удержано"
 status.own_inhibitor:
   en: "%{kind}: %{why}"
   ru: "%{kind}: %{why}"

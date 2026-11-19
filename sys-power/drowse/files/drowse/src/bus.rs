@@ -31,6 +31,7 @@ pub type InhibitorRow = (String, String, String, String, u32, u32);
 pub struct StateObject {
     state: String,
     scheduled: (String, u64),
+    next_held: bool,
     power: String,
     lid: String,
 }
@@ -48,6 +49,12 @@ impl StateObject {
     #[zbus(property)]
     fn scheduled_action(&self) -> (String, u64) {
         self.scheduled.clone()
+    }
+
+    /// Whether an inhibitor holds the entry into the next section now.
+    #[zbus(property)]
+    fn next_held(&self) -> bool {
+        self.next_held
     }
 
     /// `battery`, `ac`, or `unknown` when UPower does not answer.
@@ -78,7 +85,7 @@ impl HeldObject {
         self.sessions.clone()
     }
 
-    /// The inhibitors that hold a due entry.
+    /// The inhibitors that hold the entry into the next section now.
     #[zbus(property)]
     fn held_by_inhibitors(&self) -> Vec<InhibitorRow> {
         self.inhibitors.clone()
@@ -90,6 +97,7 @@ impl From<&View> for StateObject {
         Self {
             state: view.state.name().to_owned(),
             scheduled: view.scheduled.clone(),
+            next_held: !view.inhibitors.is_empty(),
             power: power_name(view.power).to_owned(),
             lid: lid_name(view.lid_closed).to_owned(),
         }
@@ -184,6 +192,9 @@ pub async fn publish(conn: &Connection, view: &View) -> Result<()> {
                 "ScheduledAction",
                 Variant::from(new_state.scheduled.clone()),
             );
+        }
+        if old_state.next_held != new_state.next_held {
+            changed.insert("NextHeld", Variant::from(new_state.next_held));
         }
         if old_state.lid != new_state.lid {
             changed.insert("Lid", Variant::from(new_state.lid.clone()));

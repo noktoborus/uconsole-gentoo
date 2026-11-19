@@ -285,7 +285,13 @@ it was taken; with `no` it outlives the logout.
 `drowse-status --waybar --follow` writes one line of JSON at each change,
 and as the time left runs; waybar needs no `interval`. The module shows
 the icon only; the time left and what holds the system are in the
-tooltip, and a line when the lid is closed. A click runs
+tooltip, and a line when the lid is closed. While the time runs, the
+tooltip says what may hold the next section; a user not in `wheel` sees
+only that it may be held. The icon blinks while a warning runs and
+while a due entry waits for an inhibitor. `drowse-status` reads the
+state once, then takes the values the signals carry; it reads the
+inhibitors of logind again only when one of mode `block` or
+`block-weak` is taken or let go. A click runs
 `drowse-inhibit cycle`: the first click holds every
 section with a command (`--idle`), the second holds the power off and
 the sleep too (`--all`), the third lets both go. The tool says which it

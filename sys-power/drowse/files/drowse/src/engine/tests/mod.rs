@@ -606,3 +606,43 @@ fn upower_gone_and_back() {
     let out = engine.on_power(1, PowerSource::Ac);
     assert!(has_line(&out, Level::Info, "upower: back"));
 }
+
+#[test]
+fn the_holds_of_the_next_section_are_shown_while_the_time_runs() {
+    let text = "main:\n  battery: [{after: 1m, countdown: never, enter: foo}, {after: 1m, countdown: never, action: poweroff}]\n";
+    let mut engine = engine(text, PowerSource::Battery);
+    engine.on_snapshot(
+        0,
+        Snapshot {
+            sessions: vec![session("1", true, 0)],
+            inhibitors: vec![
+                inhibitor("idle", "block-weak"),
+                inhibitor("sleep:shutdown", "block-weak"),
+            ],
+        },
+    );
+    assert_eq!(engine.view().state, State::Idle);
+    assert_eq!(
+        engine.view().inhibitors,
+        [inhibitor("idle", "block-weak")],
+        "only the hold of the kind of the next section"
+    );
+    engine.on_snapshot(1, idle_world(0));
+    assert_eq!(engine.view().state, State::Idle);
+    assert!(engine.view().inhibitors.is_empty());
+}
+
+#[test]
+fn no_hold_is_shown_while_the_system_is_in_use() {
+    let text = "main:\n  battery: [{after: 1m, countdown: never, enter: foo}]\n";
+    let mut engine = engine(text, PowerSource::Battery);
+    engine.on_snapshot(
+        0,
+        Snapshot {
+            sessions: vec![session("1", false, 0)],
+            inhibitors: vec![inhibitor("idle", "block-weak")],
+        },
+    );
+    assert_eq!(engine.view().state, State::Active);
+    assert!(engine.view().inhibitors.is_empty());
+}
