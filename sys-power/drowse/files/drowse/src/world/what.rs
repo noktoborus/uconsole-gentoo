@@ -99,6 +99,20 @@ mod tests {
         assert_eq!(Holds::parse("shutdown:sleep"), Holds::POWER);
         assert_eq!(Holds::parse("sleep:shutdown"), Holds::POWER);
         assert_eq!(Holds::parse("idle"), Holds::IDLE);
+        for what in [
+            "idle:sleep:shutdown",
+            "shutdown:idle:sleep",
+            "sleep:shutdown:idle",
+        ] {
+            assert_eq!(Holds::parse(what), Holds::parse("shutdown:sleep:idle"));
+        }
+    }
+
+    #[test]
+    fn a_kind_twice_and_empty_parts_count_as_once_and_nothing() {
+        assert_eq!(Holds::parse("sleep:sleep:shutdown"), Holds::POWER);
+        assert_eq!(Holds::parse("sleep::shutdown"), Holds::POWER);
+        assert_eq!(Holds::parse(":shutdown:sleep:"), Holds::POWER);
     }
 
     #[test]

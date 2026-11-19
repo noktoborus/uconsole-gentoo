@@ -130,6 +130,7 @@ CRATES="
 	unicode-width@0.2.3
 	unsafe-libyaml@0.2.11
 	uuid@1.29.2
+	uzers@0.12.2
 	walkdir@2.5.0
 	wasi@0.11.1+wasi-snapshot-preview1
 	wasm-bindgen-macro-support@0.2.130
@@ -176,7 +177,7 @@ RDEPEND="
 "
 BDEPEND="virtual/pkgconfig"
 
-# files/ sha256: 4dac889a6ac199fe8fa1d12d9bcfb61d2a90e429e69d7c825856dc6ceb2d5b46
+# files/ sha256: 77938b1b697cfb06283e5f64b98075d22eb44b4070c0ec126ddf0737f3ac0bdc
 
 src_unpack() {
 	cargo_src_unpack

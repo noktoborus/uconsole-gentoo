@@ -196,17 +196,11 @@ async fn signals_of(conn: &Connection, sender: &'static str) -> Result<MessageSt
         .map_err(bus("follow the signals"))
 }
 
-/// The name of a user, from `/etc/passwd`; its uid when not found.
+/// The name of a user, by the databases of the system (NSS: `/etc/passwd`,
+/// systemd-homed, LDAP); its uid when not found.
 pub fn user_name(uid: u32) -> String {
-    let text = std::fs::read_to_string("/etc/passwd").unwrap_or_default();
-    text.lines()
-        .filter_map(|line| {
-            let mut fields = line.split(':');
-            let name = fields.next()?;
-            let id = fields.nth(1)?;
-            (id.parse() == Ok(uid)).then(|| name.to_owned())
-        })
-        .next()
+    uzers::get_user_by_uid(uid)
+        .map(|user| user.name().to_string_lossy().into_owned())
         .unwrap_or_else(|| uid.to_string())
 }
 
@@ -261,3 +255,14 @@ pub async fn run(form: Form, follow: bool) -> Result<()> {
 
 /// A short wait after a change, so a burst of signals gives one line.
 const SETTLE: Duration = Duration::from_millis(50);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_user_is_named_by_the_system_and_an_unknown_uid_by_its_number() {
+        assert_eq!(user_name(0), "root");
+        assert_eq!(user_name(4_000_000_000), "4000000000");
+    }
+}
