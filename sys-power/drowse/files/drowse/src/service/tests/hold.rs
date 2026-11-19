@@ -43,7 +43,7 @@ const STOP_0: &str = "stop drowsed-stage@main.battery.1.service";
 /// `what` of `drowse-inhibit on --idle`.
 const IDLE: &str = "idle";
 
-/// `what` of `drowse-inhibit on --power`, the first click of `cycle`.
+/// `what` of `drowse-inhibit on --power`.
 const POWER: &str = "shutdown:sleep";
 
 /// An inhibitor of `drowse-inhibit`, of this kind and mode.

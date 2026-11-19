@@ -64,8 +64,13 @@ pub fn is_own(who: &str) -> bool {
 /// What the tool did.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Outcome {
-    /// The inhibitor is held, for this reason.
-    Held(String),
+    /// The inhibitors of this kind are held, for this reason.
+    Held {
+        /// What they hold.
+        kind: Kind,
+        /// Why.
+        why: String,
+    },
     /// The inhibitor is let go.
     LetGo,
     /// There was no inhibitor of the tool to let go.
@@ -76,7 +81,14 @@ impl Outcome {
     /// The message for the user, in the language of the session.
     pub fn message(&self) -> String {
         match self {
-            Self::Held(why) => t!("inhibit.on", why = why).into_owned(),
+            Self::Held { kind, why } => {
+                let kind = match kind {
+                    Kind::Idle => t!("inhibit.kind_idle"),
+                    Kind::Power => t!("inhibit.kind_power"),
+                    Kind::All => t!("inhibit.kind_all"),
+                };
+                t!("inhibit.on", kind = kind, why = why).into_owned()
+            }
             Self::LetGo => t!("inhibit.off").into_owned(),
             Self::NothingToLetGo => t!("inhibit.not_held").into_owned(),
         }
@@ -154,7 +166,7 @@ pub async fn on(kind: Kind, why: Option<&str>) -> Result<Outcome> {
             }
         }
     }
-    Ok(Outcome::Held(why))
+    Ok(Outcome::Held { kind, why })
 }
 
 /// Starts the holder in the process group of the tool, so polkit can ask
@@ -199,17 +211,26 @@ pub async fn toggle(kind: Kind, why: Option<&str>) -> Result<Outcome> {
     }
 }
 
-/// Cycles from none to power to all to none.
+/// The click of the module of waybar: none, then `idle` (no section is
+/// entered), then all (no power off or sleep either), then none.
 pub async fn cycle(why: Option<&str>) -> Result<Outcome> {
     let logind = logind().await?;
-    let idle = own_pids(&logind, Kind::Idle).await?;
-    let power = own_pids(&logind, Kind::Power).await?;
-    if !idle.is_empty() {
-        off(Kind::All).await
-    } else if !power.is_empty() {
-        on(Kind::All, why).await
-    } else {
-        on(Kind::Power, why).await
+    let idle = !own_pids(&logind, Kind::Idle).await?.is_empty();
+    let power = !own_pids(&logind, Kind::Power).await?.is_empty();
+    match cycle_next(idle, power) {
+        Some(kind) => on(kind, why).await,
+        None => off(Kind::All).await,
+    }
+}
+
+/// The next step of `cycle` from what of the tool is held: the kind to
+/// hold, or none to let all go. A power hold, alone or not, is the end
+/// of the round.
+fn cycle_next(idle: bool, power: bool) -> Option<Kind> {
+    match (idle, power) {
+        (false, false) => Some(Kind::Idle),
+        (true, false) => Some(Kind::All),
+        (_, true) => None,
     }
 }
 
@@ -273,6 +294,14 @@ mod tests {
         assert!(matches_kind("shutdown:sleep", Kind::Power));
         assert!(matches_kind("sleep:shutdown", Kind::Power));
         assert!(!matches_kind("idle", Kind::Power));
+    }
+
+    #[test]
+    fn cycle_holds_the_sections_then_the_power_then_nothing() {
+        assert_eq!(cycle_next(false, false), Some(Kind::Idle));
+        assert_eq!(cycle_next(true, false), Some(Kind::All));
+        assert_eq!(cycle_next(true, true), None);
+        assert_eq!(cycle_next(false, true), None);
     }
 
     #[test]

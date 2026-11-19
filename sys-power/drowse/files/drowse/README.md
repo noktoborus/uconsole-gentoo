@@ -285,8 +285,10 @@ it was taken; with `no` it outlives the logout.
 `drowse-status --waybar --follow` writes one line of JSON at each change,
 and as the time left runs; waybar needs no `interval`. The module shows
 the icon only; the time left and what holds the system are in the
-tooltip. A click runs `drowse-inhibit cycle`: none, then `--power`, then
-`--all`, then none. It does not touch an inhibitor of
+tooltip. A click runs `drowse-inhibit cycle`: the first click holds every
+section with a command (`--idle`), the second holds the power off and
+the sleep too (`--all`), the third lets both go. The tool says which it
+holds. It does not touch an inhibitor of
 `drowse-inhibit -- <command>`, which the tooltip shows as
 `until <command>`.
 

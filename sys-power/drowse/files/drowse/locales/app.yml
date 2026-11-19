@@ -1,8 +1,17 @@
 _version: 2
 
 inhibit.on:
-  en: "drowse-inhibit: the system is held (%{why})"
-  ru: "drowse-inhibit: система удерживается (%{why})"
+  en: "drowse-inhibit: %{kind} held (%{why})"
+  ru: "drowse-inhibit: удерживаются %{kind} (%{why})"
+inhibit.kind_idle:
+  en: "the sections with a command"
+  ru: "секции с командой"
+inhibit.kind_power:
+  en: "the power off and the sleep"
+  ru: "выключение и сон"
+inhibit.kind_all:
+  en: "the sections with a command, the power off and the sleep"
+  ru: "секции с командой, выключение и сон"
 inhibit.off:
   en: "drowse-inhibit: the system is let go"
   ru: "drowse-inhibit: удержание снято"
