@@ -76,8 +76,8 @@ status.lid_closed:
   en: "Lid closed"
   ru: "Крышка закрыта"
 status.power_unknown:
-  en: "Power source not known (taken as AC)"
-  ru: "Источник питания неизвестен (считаем сеть)"
+  en: "On AC (assumed)"
+  ru: "Сеть (предположительно)"
 time.hours_minutes:
   en: "%{hours} h %{minutes} min"
   ru: "%{hours} ч %{minutes} мин"
