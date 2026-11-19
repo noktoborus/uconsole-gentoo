@@ -6,7 +6,8 @@ After=drowsed.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-TimeoutStartSec=5s
-TimeoutStopSec=5s
+TimeoutStartSec=15s
+TimeoutStopSec=15s
+RuntimeDirectory=drowse/%i
 ExecStart=-/usr/bin/drowsed stage enter %i
 ExecStop=/usr/bin/drowsed stage leave %i

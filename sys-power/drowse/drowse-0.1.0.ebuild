@@ -1,6 +1,7 @@
-# drowse: while every session of logind is idle, drowsed does the actions
-# of its stages (a command and its undo, an action of power); its state
-# is on the system bus. drowse-inhibit holds the system by hand,
+# drowse: while every session of logind is idle, drowsed enters the
+# sections of its chains, picked by the power source and the lid (a
+# command and its undo, an action of power); its state is on the system
+# bus. drowse-inhibit holds the system by hand,
 # drowse-status shows the state, for waybar too. With USE=waybar the
 # module files go to /etc/xdg/waybar. With USE=sway a file sets the idle
 # hint in Sway. /etc/drowse.yaml has the settings.
@@ -12,7 +13,10 @@
 # /etc/drowse.yaml holds the YAML chains; /etc is
 # in CONFIG_PROTECT, so a change made on the device is kept on an update.
 #
-# The profiles of TuneD cm5-powersave, the power save of the first stage,
+# /usr/libexec/drowse/drowsed-tuned sets the profile of TuneD of a section
+# and gives the one before back at its leave.
+#
+# The profiles of TuneD cm5-powersave, the power save of the first section,
 # and cm5-powersave-no-radio, a deeper step with every radio off, are
 # examples in the documentation. With USE=cm5-tuned they are also
 # profiles of TuneD in /usr/lib/tuned/profiles, and TuneD comes with
@@ -147,7 +151,7 @@ CRATES="
 
 inherit cargo systemd
 
-DESCRIPTION="Does the actions of its stages while every session of logind is idle"
+DESCRIPTION="Enters the sections of its chains while every session of logind is idle"
 HOMEPAGE="https://www.clockworkpi.com/uconsole"
 SRC_URI="${CARGO_CRATE_URIS}"
 S=${WORKDIR}/drowse
@@ -172,7 +176,7 @@ RDEPEND="
 "
 BDEPEND="virtual/pkgconfig"
 
-# files/ sha256: 2ebbcd1ca4d71bc3f80042ad6bc6f88c2d3ed26a94950137096fc0d1087476fb
+# files/ sha256: e09533d59ead3363ae3924a2f7be70dec04bbe43d26a79bba73f7bbeca987770
 
 src_unpack() {
 	cargo_src_unpack
@@ -186,6 +190,8 @@ src_install() {
 		systemd/drowsed-config.service
 	insinto "$(systemd_get_systempresetdir)"
 	doins preset/50-drowse.preset
+	exeinto /usr/libexec/drowse
+	doexe libexec/drowsed-tuned
 	insinto /usr/share/dbus-1/system.d
 	doins dbus/io.github.noktoborus.Drowse.conf
 	insinto /etc
@@ -202,7 +208,7 @@ src_install() {
 		insinto /etc/sway/config.d
 		doins "${FILESDIR}"/80-idlehint.conf
 	fi
-	dodoc README.md
+	dodoc README.md REQUIREMENTS.md
 	# The profile of TuneD is an example the user copies by hand; kept
 	# whole, not compressed.
 	docinto examples

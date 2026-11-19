@@ -3,20 +3,27 @@
 
 use std::collections::BTreeMap;
 
-use crate::settings::Power;
+use crate::settings::Chain;
+use crate::world::system::STAGE_UNIT_PREFIX;
 
-/// The name of the unit of a stage: `drowsed-stage@battery-1.service`.
-pub fn unit_name(power: Power, stage: usize) -> String {
-    format!("drowsed-stage@{}-{stage}.service", power.instance())
+/// The end of the name of a unit.
+const SUFFIX: &str = ".service";
+
+/// The name of the unit of a stage, by the name of its section:
+/// `drowsed-stage@main.battery.2.service`.
+pub fn unit_name(chain: Chain, stage: usize) -> String {
+    format!("{STAGE_UNIT_PREFIX}{}{SUFFIX}", chain.section_name(stage))
+}
+
+/// The chain and the stage of a unit, from its name.
+pub fn section_of(name: &str) -> Option<(Chain, usize)> {
+    let section = name.strip_prefix(STAGE_UNIT_PREFIX)?.strip_suffix(SUFFIX)?;
+    Chain::parse_section_name(section)
 }
 
 /// The number of the stage of a unit, from its name; 0 when it has none.
 fn stage_number(name: &str) -> usize {
-    name.trim_end_matches(".service")
-        .rsplit('-')
-        .next()
-        .and_then(|number| number.parse().ok())
-        .unwrap_or(0)
+    section_of(name).map_or(0, |(_, stage)| stage)
 }
 
 /// A job asked of systemd.
@@ -160,6 +167,14 @@ impl Units {
         }
     }
 
+    /// The unit wanted up whose start runs or ran: the section entered.
+    pub fn running(&self) -> Option<&str> {
+        self.units
+            .iter()
+            .find(|(_, unit)| unit.wanted_up && matches!(unit.known, Known::Starting | Known::Up))
+            .map(|(name, _)| name.as_str())
+    }
+
     /// Whether no job runs and no unit is up.
     pub fn all_down(&self) -> bool {
         self.units.values().all(|unit| unit.known == Known::Down)
@@ -189,13 +204,29 @@ impl Units {
 mod tests {
     use super::*;
 
-    const A: &str = "drowsed-stage@battery-0.service";
-    const B: &str = "drowsed-stage@battery-1.service";
+    const A: &str = "drowsed-stage@main.battery.1.service";
+    const B: &str = "drowsed-stage@main.battery.2.service";
 
     #[test]
     fn names() {
-        assert_eq!(unit_name(Power::Battery, 0), A);
-        assert_eq!(unit_name(Power::Ac, 2), "drowsed-stage@ac-2.service");
+        use crate::settings::Power;
+        assert_eq!(unit_name(Chain::main(Power::Battery), 0), A);
+        let lid = Chain::lid(Power::Ac);
+        assert_eq!(unit_name(lid, 2), "drowsed-stage@lid.ac.3.service");
+        assert_eq!(section_of(&unit_name(lid, 2)), Some((lid, 2)));
+        assert_eq!(section_of("drowsed-stage@battery-0.service"), None);
+    }
+
+    #[test]
+    fn the_running_unit_is_the_one_wanted_up() {
+        let mut units = Units::default();
+        assert_eq!(units.running(), None);
+        units.want_up(A, 0);
+        assert_eq!(units.running(), Some(A));
+        units.job_ended(A, true, 1);
+        assert_eq!(units.running(), Some(A));
+        units.want_all_down(2);
+        assert_eq!(units.running(), None);
     }
 
     #[test]
@@ -260,7 +291,7 @@ mod tests {
     #[test]
     fn the_order_is_by_number() {
         let mut units = Units::default();
-        let ten = "drowsed-stage@battery-10.service";
+        let ten = "drowsed-stage@main.battery.11.service";
         for name in [A, B, ten] {
             units.want_up(name, 0);
             units.job_ended(name, true, 1);

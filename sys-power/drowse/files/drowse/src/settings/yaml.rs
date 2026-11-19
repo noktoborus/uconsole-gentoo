@@ -9,6 +9,7 @@ use serde::{Deserialize, Deserializer};
 use crate::error::{Error, Result};
 
 use super::action::{Command, LogindAction};
+use super::chain::{Chain, Group, Power};
 use super::time::{self, Span};
 
 /// Reads and validates a settings file.
@@ -63,6 +64,16 @@ pub struct Chains {
     pub ac: Vec<Section>,
 }
 
+impl Chains {
+    /// The sections of a power source.
+    pub fn get(&self, power: Power) -> &[Section] {
+        match power {
+            Power::Battery => &self.battery,
+            Power::Ac => &self.ac,
+        }
+    }
+}
+
 /// One section in a chain.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Section {
@@ -77,6 +88,28 @@ pub struct Section {
 }
 
 impl Section {
+    /// Whether both sections run the same commands, word for word: the
+    /// same `enter` and `leave`, at least one of them set.
+    pub fn same_commands(&self, other: &Self) -> bool {
+        fn words(command: &Option<Command>) -> Option<&[String]> {
+            command.as_ref().map(Command::words)
+        }
+        match (&self.kind, &other.kind) {
+            (
+                SectionKind::Command { enter, leave },
+                SectionKind::Command {
+                    enter: other_enter,
+                    leave: other_leave,
+                },
+            ) => {
+                (enter.is_some() || leave.is_some())
+                    && words(enter) == words(other_enter)
+                    && words(leave) == words(other_leave)
+            }
+            _ => false,
+        }
+    }
+
     /// The name to show: `hint`, or the action or command as written.
     pub fn shown_name(&self) -> &str {
         self.hint.as_deref().unwrap_or_else(|| match &self.kind {
@@ -177,13 +210,13 @@ impl TryFrom<RawFile> for SettingsFile {
         for (index, section) in raw.sections.into_iter().enumerate() {
             sections.push(Section::from_raw(
                 section,
-                &format!("sections[{}]", index + 1),
+                &format!("sections.{}", index + 1),
             )?);
         }
-        let main = raw.main.into_chains("main")?;
+        let main = raw.main.into_chains(Group::Main)?;
         let lid = raw
             .lid
-            .map(|chains| chains.into_chains("lid"))
+            .map(|chains| chains.into_chains(Group::Lid))
             .transpose()?;
         let file = Self {
             sessions: Sessions {
@@ -196,44 +229,46 @@ impl TryFrom<RawFile> for SettingsFile {
             main,
             lid,
         };
-        validate_last_actions(&file.main, "main")?;
-        if let Some(lid) = &file.lid {
-            validate_last_actions(lid, "lid")?;
-        }
         Ok(file)
     }
 }
 
 impl RawChains {
-    fn into_chains(self, name: &str) -> Result<Chains> {
+    fn into_chains(self, group: Group) -> Result<Chains> {
         Ok(Chains {
-            battery: build_chain(self.battery, name, "battery")?,
-            ac: build_chain(self.ac, name, "ac")?,
+            battery: build_chain(
+                self.battery,
+                Chain {
+                    group,
+                    power: Power::Battery,
+                },
+            )?,
+            ac: build_chain(
+                self.ac,
+                Chain {
+                    group,
+                    power: Power::Ac,
+                },
+            )?,
         })
     }
 }
 
-fn build_chain(raw: Vec<RawSection>, parent: &str, power: &str) -> Result<Vec<Section>> {
+/// The sections of a chain; an action of logind is in its last section
+/// only.
+fn build_chain(raw: Vec<RawSection>, chain: Chain) -> Result<Vec<Section>> {
+    let last = raw.len().saturating_sub(1);
     raw.into_iter()
         .enumerate()
         .map(|(index, section)| {
-            Section::from_raw(section, &format!("{parent}.{power}[{}]", index + 1))
+            let place = chain.section_name(index);
+            let section = Section::from_raw(section, &place)?;
+            if matches!(section.kind, SectionKind::Action(_)) && index != last {
+                return Err(Error::SettingsActionNotLast { place });
+            }
+            Ok(section)
         })
         .collect()
-}
-
-fn validate_last_actions(chains: &Chains, parent: &str) -> Result<()> {
-    for (name, sections) in [("battery", &chains.battery), ("ac", &chains.ac)] {
-        for (index, section) in sections.iter().enumerate() {
-            if matches!(section.kind, SectionKind::Action(_)) && index + 1 != sections.len() {
-                return Err(Error::SettingsActionNotLast {
-                    chain: format!("{parent}.{name}"),
-                    section: index,
-                });
-            }
-        }
-    }
-    Ok(())
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -401,14 +436,33 @@ mod tests {
     }
 
     #[test]
+    fn the_same_commands_are_the_same_words() {
+        let file = parse(
+            "main:\n  battery:\n    \
+             - {enter: tuned-adm profile x, leave: off}\n    \
+             - {enter: \"tuned-adm  profile x\", leave: off, after: 1m, hint: other}\n    \
+             - {enter: tuned-adm profile y, leave: off}\n    \
+             - {after: 1m}\n    \
+             - {after: 2m}\n",
+        )
+        .unwrap();
+        let chain = &file.main.battery;
+        assert!(chain[0].same_commands(&chain[1]));
+        assert!(!chain[0].same_commands(&chain[2]));
+        assert!(
+            !chain[3].same_commands(&chain[4]),
+            "no command: nothing runs on"
+        );
+    }
+
+    #[test]
     fn logind_action_must_be_last() {
-        let Err(Error::SettingsActionNotLast { chain, section }) =
+        let Err(Error::SettingsActionNotLast { place }) =
             parse("main:\n  battery: [{action: poweroff}, {enter: echo}]\n")
         else {
             panic!("expected an action position error");
         };
-        assert_eq!(chain, "main.battery");
-        assert_eq!(section, 0);
+        assert_eq!(place, "main.battery.1");
     }
 
     #[test]

@@ -38,6 +38,10 @@ pub trait Manager {
     /// Every inhibitor of every user.
     fn list_inhibitors(&self) -> zbus::Result<Vec<InhibitorRow>>;
 
+    /// Whether the lid is closed; logind sends its changes.
+    #[zbus(property)]
+    fn lid_closed(&self) -> zbus::Result<bool>;
+
     /// `poweroff`.
     fn power_off_with_flags(&self, flags: u64) -> zbus::Result<()>;
 

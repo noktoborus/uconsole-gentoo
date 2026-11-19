@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use zbus::object_server::SignalEmitter;
 use zbus::{Connection, Variant, interface};
 
-use crate::engine::View;
+use crate::engine::{View, lid_name};
 use crate::error::{Error, Result};
 use crate::world::{Inhibitor, PowerSource, Session};
 
@@ -25,12 +25,14 @@ pub type SessionRow = (String, u32, String, String, String, String);
 /// An inhibitor on the bus: what, who, why, mode, uid, pid.
 pub type InhibitorRow = (String, String, String, String, u32, u32);
 
-/// The object of the state: `State`, `ScheduledAction`, `PowerSource`.
+/// The object of the state: `State`, `ScheduledAction`, `PowerSource`,
+/// `Lid`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StateObject {
     state: String,
     scheduled: (String, u64),
     power: String,
+    lid: String,
 }
 
 #[interface(name = "io.github.noktoborus.Drowse")]
@@ -52,6 +54,12 @@ impl StateObject {
     #[zbus(property)]
     fn power_source(&self) -> String {
         self.power.clone()
+    }
+
+    /// `open` or `closed`, as logind says; `open` with no lid.
+    #[zbus(property)]
+    fn lid(&self) -> String {
+        self.lid.clone()
     }
 }
 
@@ -83,6 +91,7 @@ impl From<&View> for StateObject {
             state: view.state.name().to_owned(),
             scheduled: view.scheduled.clone(),
             power: power_name(view.power).to_owned(),
+            lid: lid_name(view.lid_closed).to_owned(),
         }
     }
 }
@@ -175,6 +184,9 @@ pub async fn publish(conn: &Connection, view: &View) -> Result<()> {
                 "ScheduledAction",
                 Variant::from(new_state.scheduled.clone()),
             );
+        }
+        if old_state.lid != new_state.lid {
+            changed.insert("Lid", Variant::from(new_state.lid.clone()));
         }
         if old_state.power != new_state.power {
             changed.insert("PowerSource", Variant::from(new_state.power.clone()));

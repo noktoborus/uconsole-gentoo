@@ -32,10 +32,8 @@ pub enum Error {
     },
     /// A logind action is not the last section of its chain.
     SettingsActionNotLast {
-        /// The chain name.
-        chain: String,
-        /// The zero based place of the section.
-        section: usize,
+        /// The name of the section: `main.battery.1`.
+        place: String,
     },
     /// A command in the settings cannot be split into words.
     SettingsCommand {
@@ -127,11 +125,9 @@ impl fmt::Display for Error {
             Self::SettingsActionUnknown { action, place } => {
                 write!(f, "unknown logind action {action} in {place}")
             }
-            Self::SettingsActionNotLast { chain, section } => write!(
-                f,
-                "logind action in section {} of chain {chain} is not last",
-                section + 1
-            ),
+            Self::SettingsActionNotLast { place } => {
+                write!(f, "logind action in {place} is not last")
+            }
             Self::SettingsCommand { command, place } => {
                 write!(f, "invalid command in {place}: {command}")
             }

@@ -18,7 +18,7 @@ use crate::world::{Event, Login, Power, Refusal, Units};
 use crate::{bus, journal};
 
 /// How long the stop of the service waits for `leave` commands.
-const STOP_WAIT: Duration = Duration::from_secs(10);
+const STOP_WAIT: Duration = Duration::from_secs(20);
 
 /// The time of `CLOCK_MONOTONIC`.
 pub trait Clock {
@@ -108,7 +108,8 @@ where
 {
     let left_up = world.stage_units_up().await;
     let power = world.source().await;
-    let (engine, out) = Engine::new(settings, power, clock.now(), left_up);
+    let lid_closed = world.lid_closed().await?;
+    let (engine, out) = Engine::new(settings, power, lid_closed, clock.now(), left_up);
     let mut driver = Driver {
         world,
         clock,
@@ -116,8 +117,7 @@ where
         published: None,
     };
     driver.execute(out).await;
-    let snapshot = read(world).await?;
-    let out = driver.engine.on_snapshot(clock.now(), snapshot);
+    let out = driver.refresh().await?;
     driver.execute(out).await;
     driver.publish(publisher).await?;
     tokio::pin!(stop);
@@ -176,10 +176,7 @@ where
     /// Gives an event of the world to the engine.
     async fn on_event(&mut self, event: Event) -> Result<()> {
         let out = match event {
-            Event::Login => {
-                let snapshot = read(self.world).await?;
-                self.engine.on_snapshot(self.clock.now(), snapshot)
-            }
+            Event::Login => self.refresh().await?,
             Event::Power(power) => self.engine.on_power(self.clock.now(), power),
             Event::JobEnded { unit, done } => {
                 self.engine.on_job_ended(self.clock.now(), &unit, done)
@@ -190,14 +187,21 @@ where
         Ok(())
     }
 
+    /// Reads logind again: the lid, then the sessions and the inhibitors.
+    async fn refresh(&mut self) -> Result<Vec<Command>> {
+        let mut out = self
+            .engine
+            .on_lid(self.clock.now(), self.world.lid_closed().await?);
+        let snapshot = read(self.world).await?;
+        out.extend(self.engine.on_snapshot(self.clock.now(), snapshot));
+        Ok(out)
+    }
+
     /// The time of the engine came; before an action, logind is read again.
     async fn on_due(&mut self, due: Due) -> Result<()> {
         let out = match due {
             Due::Announce => self.engine.on_announce_due(self.clock.now()),
-            Due::Action => {
-                let snapshot = read(self.world).await?;
-                self.engine.on_snapshot(self.clock.now(), snapshot)
-            }
+            Due::Action => self.refresh().await?,
         };
         self.execute(out).await;
         Ok(())

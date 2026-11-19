@@ -1,0 +1,95 @@
+#!/bin/sh
+# drowsed-tuned enter <profile>... | leave: the profile of TuneD for a
+# section of drowsed, run by its unit, drowsed-stage@.service.
+#
+# "enter" keeps the profile and the mode of TuneD before, sets the
+# profile and keeps it as the one set. "leave" gives the profile before
+# back, but only when the one set is still active in the mode "manual":
+# else someone changed it, and it stays. Each step says what it did on
+# stdout, for the journal of the unit.
+#
+# The state is in $RUNTIME_DIRECTORY, the directory of the unit
+# (RuntimeDirectory=): systemd makes it empty at the start of the unit and
+# deletes it after its stop.
+
+set -eu
+
+STATE=${RUNTIME_DIRECTORY:?the directory of the unit: RuntimeDirectory=}
+
+# The value of a line "<label>: <value>" of the output of tuned-adm.
+field() {
+	sed -n "s/^$1: //p"
+}
+
+# The active profile; empty when there is none.
+active() {
+	out=$(tuned-adm active) || return
+	printf '%s\n' "$out" | field 'Current active profile'
+}
+
+# The mode of TuneD: "auto" or "manual".
+mode() {
+	out=$(tuned-adm profile_mode) || return
+	printf '%s\n' "$out" | field 'Profile selection mode'
+}
+
+# The profile before, in words: the auto profile, none, or its name.
+before_name() {
+	if [ "$2" = auto ]; then
+		echo 'the auto profile'
+	else
+		echo "${1:-no profile}"
+	fi
+}
+
+enter() {
+	[ $# -gt 0 ] || usage
+	before=$(active)
+	before_mode=$(mode)
+	tuned-adm profile "$@"
+	printf '%s\n' "$before" > "$STATE/before"
+	printf '%s\n' "$before_mode" > "$STATE/mode"
+	printf '%s\n' "$*" > "$STATE/set"
+	echo "tuned: $* set; before: ${before:-no profile} ($before_mode)"
+}
+
+leave() {
+	if [ ! -f "$STATE/set" ]; then
+		echo 'tuned: nothing to give back'
+		return
+	fi
+	read -r set < "$STATE/set"
+	read -r before < "$STATE/before" || before=
+	read -r before_mode < "$STATE/mode"
+	rm -f "$STATE/set" "$STATE/before" "$STATE/mode"
+	now=$(active)
+	now_mode=$(mode)
+	name=$(before_name "$before" "$before_mode")
+	if [ "$now" != "$set" ] || [ "$now_mode" != manual ]; then
+		echo "tuned: the profile is ${now:-none} ($now_mode), not $set as set; $name is not given back"
+	elif [ "$before_mode" = auto ]; then
+		tuned-adm auto_profile
+		echo "tuned: $name given back"
+	elif [ -z "$before" ]; then
+		tuned-adm off
+		echo "tuned: $name given back"
+	else
+		# shellcheck disable=SC2086 # a merged profile is its names apart
+		tuned-adm profile $before
+		echo "tuned: $name given back"
+	fi
+}
+
+usage() {
+	echo 'usage: drowsed-tuned enter <profile>... | leave' >&2
+	exit 2
+}
+
+case "${1:-}" in
+	enter)
+		shift
+		enter "$@"
+		;;
+	leave) leave ;;
+	*) usage ;;
+esac

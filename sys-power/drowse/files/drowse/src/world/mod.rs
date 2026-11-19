@@ -108,7 +108,8 @@ pub enum Refusal {
 /// Something in the world that changed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
-    /// The sessions or the inhibitors may have changed: read them again.
+    /// The sessions, the inhibitors or the lid may have changed: read them
+    /// again.
     Login,
     /// The power source changed.
     Power(PowerSource),
@@ -129,6 +130,8 @@ pub trait Login {
     fn sessions(&self) -> impl Future<Output = crate::Result<Vec<Session>>>;
     /// The inhibitors of every user.
     fn inhibitors(&self) -> impl Future<Output = crate::Result<Vec<Inhibitor>>>;
+    /// Whether the lid is closed; false with no lid.
+    fn lid_closed(&self) -> impl Future<Output = crate::Result<bool>>;
     /// Does an action of logind; logind keeps to the inhibitors.
     fn act(&self, action: LogindAction) -> impl Future<Output = Result<(), Refusal>>;
 }

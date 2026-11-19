@@ -6,7 +6,7 @@ use std::fmt;
 use std::os::unix::process::CommandExt;
 use std::path::Path;
 
-use crate::settings::{self, Command, Power, SectionKind};
+use crate::settings::{self, Chain, Command, SectionKind};
 
 /// What a unit of a section runs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -31,7 +31,8 @@ impl Part {
 /// Why a section cannot run its command.
 #[derive(Debug)]
 pub enum StageError {
-    /// The instance is not `battery-<n>` or `ac-<n>`.
+    /// The instance is not the name of a section: `main.battery.<n>`,
+    /// `lid.ac.<n>`, …
     Instance(String),
     /// The settings file cannot be read.
     Settings(crate::Error),
@@ -53,7 +54,7 @@ impl fmt::Display for StageError {
         match self {
             Self::Instance(instance) => write!(
                 f,
-                "{instance}: not an instance of a section (battery-<n>, ac-<n>)"
+                "{instance}: not the name of a section (main.battery.<n>, lid.ac.<n>, ...)"
             ),
             Self::Settings(_) => f.write_str("cannot read the settings"),
             Self::NoStage(instance) => write!(f, "{instance}: no such section in the settings"),
@@ -75,28 +76,16 @@ impl std::error::Error for StageError {
     }
 }
 
-/// Reads an instance: its power source and the number of its section.
-pub fn parse_instance(instance: &str) -> Option<(Power, usize)> {
-    let (power, number) = instance.rsplit_once('-')?;
-    if number.is_empty() || !number.bytes().all(|b| b.is_ascii_digit()) {
-        return None;
-    }
-    let power = Power::ALL
-        .into_iter()
-        .find(|known| known.instance() == power)?;
-    Some((power, number.parse().ok()?))
-}
-
 /// The command of a part of a section, if it has one. `None`: nothing to run.
 pub fn command_of(
     settings: &settings::Settings,
     instance: &str,
     part: Part,
 ) -> Result<Option<Command>, StageError> {
-    let (power, number) =
-        parse_instance(instance).ok_or_else(|| StageError::Instance(instance.to_owned()))?;
+    let (chain, number) = Chain::parse_section_name(instance)
+        .ok_or_else(|| StageError::Instance(instance.to_owned()))?;
     let section = settings
-        .sections(power)
+        .sections(chain)
         .get(number)
         .ok_or_else(|| StageError::NoStage(instance.to_owned()))?;
     match part {
@@ -142,40 +131,42 @@ main:
     - action: poweroff
   ac:
     - enter: nmcli radio all off
+lid:
+  battery:
+    - enter: rfkill block all
 ";
-
-    #[test]
-    fn instances() {
-        assert_eq!(parse_instance("battery-0"), Some((Power::Battery, 0)));
-        assert_eq!(parse_instance("ac-12"), Some((Power::Ac, 12)));
-        for wrong in ["battery", "battery-", "battery-x", "dc-1", "ac--1", "-1"] {
-            assert_eq!(parse_instance(wrong), None, "{wrong}");
-        }
-    }
 
     #[test]
     fn the_parts_of_a_stage() {
         let settings = settings::parse(TEXT).unwrap();
-        let action = command_of(&settings, "battery-0", Part::Enter)
+        let action = command_of(&settings, "main.battery.1", Part::Enter)
             .unwrap()
             .unwrap();
         assert_eq!(action.words(), ["tuned-adm", "profile", "powersave"]);
-        let resume = command_of(&settings, "battery-0", Part::Leave)
+        let resume = command_of(&settings, "main.battery.1", Part::Leave)
             .unwrap()
             .unwrap();
         assert_eq!(resume.words(), ["tuned-adm", "auto_profile"]);
         assert!(
-            command_of(&settings, "ac-0", Part::Leave)
+            command_of(&settings, "main.ac.1", Part::Leave)
                 .unwrap()
                 .is_none()
         );
         assert!(matches!(
-            command_of(&settings, "battery-1", Part::Enter),
+            command_of(&settings, "main.battery.2", Part::Enter),
             Err(StageError::NotACommand(_))
         ));
         assert!(matches!(
-            command_of(&settings, "ac-3", Part::Enter),
+            command_of(&settings, "main.ac.4", Part::Enter),
             Err(StageError::NoStage(_))
+        ));
+        let lid = command_of(&settings, "lid.battery.1", Part::Enter)
+            .unwrap()
+            .unwrap();
+        assert_eq!(lid.words(), ["rfkill", "block", "all"]);
+        assert!(matches!(
+            command_of(&settings, "battery-0", Part::Enter),
+            Err(StageError::Instance(_))
         ));
     }
 }

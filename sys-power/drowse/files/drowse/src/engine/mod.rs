@@ -9,7 +9,7 @@ use std::time::Duration;
 
 pub use units::{Job, unit_name};
 
-use crate::settings::{LogindAction, Power, Section, SectionKind, Settings, Span};
+use crate::settings::{Chain, Group, LogindAction, Power, Section, SectionKind, Settings, Span};
 use crate::world::what::Hold;
 use crate::world::{Inhibitor, PowerSource, Session, SessionState};
 use units::{Ended, Units};
@@ -68,6 +68,8 @@ pub struct View {
     pub inhibitors: Vec<Inhibitor>,
     /// The power source.
     pub power: PowerSource,
+    /// Whether the lid is closed, as logind says.
+    pub lid_closed: bool,
 }
 
 /// The level of a line of the journal.
@@ -141,6 +143,7 @@ enum Phase {
 pub struct Engine {
     settings: Settings,
     power: PowerSource,
+    lid_closed: bool,
     snapshot: Snapshot,
     phase: Phase,
     run_start: u64,
@@ -155,12 +158,14 @@ impl Engine {
     pub fn new(
         settings: Settings,
         power: PowerSource,
+        lid_closed: bool,
         now: u64,
         left_up: Vec<String>,
     ) -> (Self, Vec<Command>) {
         let mut engine = Self {
             settings,
             power,
+            lid_closed,
             snapshot: Snapshot::default(),
             phase: Phase::Active,
             run_start: now,
@@ -194,20 +199,29 @@ impl Engine {
     /// The power source changed.
     pub fn on_power(&mut self, now: u64, power: PowerSource) -> Vec<Command> {
         let mut out = Vec::new();
-        let changed = section(power) != section(self.power);
         if power != self.power && power == PowerSource::Unknown {
             out.push(warning(UPOWER_GONE.to_owned()));
         } else if power != self.power && self.power == PowerSource::Unknown {
             out.push(info("upower: back on the bus".to_owned()));
         }
+        let before = self.chain();
         self.power = power;
-        if changed {
-            self.activity = now;
-            out.push(info(format!(
-                "power: {}; the times moved",
-                power_name(power)
-            )));
+        let what = format!("power: {}", power_name(power));
+        self.change_chain(now, before, &what, &mut out);
+        self.evaluate(now, false, &mut out);
+        out
+    }
+
+    /// The lid was closed or opened, as logind says.
+    pub fn on_lid(&mut self, now: u64, closed: bool) -> Vec<Command> {
+        let mut out = Vec::new();
+        if closed == self.lid_closed {
+            return out;
         }
+        let before = self.chain();
+        self.lid_closed = closed;
+        let what = format!("lid: {}", lid_name(closed));
+        self.change_chain(now, before, &what, &mut out);
         self.evaluate(now, false, &mut out);
         out
     }
@@ -363,6 +377,7 @@ impl Engine {
             sessions,
             inhibitors,
             power: self.power,
+            lid_closed: self.lid_closed,
         }
     }
 
@@ -443,7 +458,7 @@ impl Engine {
             let inhibitors = held_by(section, &self.snapshot.inhibitors);
             if inhibitors.is_empty() {
                 if logged {
-                    out.push(info(format!("released: {} now", section.shown_name())));
+                    out.push(info(format!("released: {} now", self.named(stage))));
                 }
                 self.phase = if announced && at > now {
                     Phase::Announced { stage, at }
@@ -456,7 +471,7 @@ impl Engine {
                 };
             } else {
                 if !logged {
-                    out.push(held_line(section, &inhibitors[0]));
+                    out.push(held_line(&self.named(stage), &inhibitors[0]));
                     self.phase = Phase::Held {
                         stage,
                         at,
@@ -479,8 +494,8 @@ impl Engine {
             match (self.phase, due) {
                 (Phase::Counting { stage, .. }, Due::Announce) => self.announce(stage, now, out),
                 (Phase::Counting { stage, .. }, Due::Action)
-                | (Phase::Announced { stage, .. }, Due::Action) => self.act(stage, now, out),
-                (Phase::Ready { stage, .. }, Due::Action) => self.enter(stage, now, out),
+                | (Phase::Announced { stage, .. }, Due::Action)
+                | (Phase::Ready { stage, .. }, Due::Action) => self.act(stage, now, out),
                 _ => return,
             }
         }
@@ -519,7 +534,8 @@ impl Engine {
             return;
         }
         out.push(info(format!(
-            "section {stage}: waits for the leave of the section before"
+            "section {}: waits for the leave of the section before",
+            self.named(stage)
         )));
         self.stop_units(now, out);
         self.phase = Phase::Waiting {
@@ -550,26 +566,77 @@ impl Engine {
                 enter: None,
                 leave: None,
             } => {
-                out.push(info(format!("section {stage}: entered, no action")));
+                out.push(info(format!(
+                    "section {}: entered, no action",
+                    self.named(stage)
+                )));
             }
             SectionKind::Command { .. } => {
-                let unit = unit_name(section(self.power), stage);
-                out.push(info(format!(
-                    "section {stage} ({}): started",
-                    this.shown_name()
-                )));
+                let unit = unit_name(self.chain(), stage);
+                out.push(info(format!("section {}: started", self.named(stage))));
                 out.extend(self.units.want_up(&unit, now).into_iter().map(Command::Job));
             }
         }
+        self.phase = self.after_entry(stage, now);
+    }
+
+    /// The phase after the entry into a stage at `now`: the count of the
+    /// next stage, or the end of the chain.
+    fn after_entry(&self, stage: usize, now: u64) -> Phase {
         let next = stage + 1;
-        self.phase = if next < self.sections().len() {
+        if next < self.sections().len() {
             Phase::Counting {
                 stage: next,
                 base: now,
             }
         } else {
             Phase::Done
-        };
+        }
+    }
+
+    /// The chain in use changed from `before`. When the first section of
+    /// the new chain runs the same commands as the section entered, that
+    /// section becomes the first one of the new chain, with no command run,
+    /// and the next one counts from now. Else the change is activity.
+    fn change_chain(&mut self, now: u64, before: Chain, what: &str, out: &mut Vec<Command>) {
+        let chain = self.chain();
+        if chain == before {
+            return;
+        }
+        if let Some((stage, unit)) = self.carried_over(before) {
+            out.push(info(format!(
+                "{what}; section {} -> {}: the same commands, none run; {unit} runs on",
+                self.named_in(before, stage),
+                self.named(0)
+            )));
+            self.phase = self.after_entry(0, now);
+            return;
+        }
+        self.activity = now;
+        out.push(info(format!("{what}; the times moved")));
+    }
+
+    /// The stage of `before` that is entered and the unit that runs it,
+    /// when its commands are those of the first section of the chain now.
+    fn carried_over(&self, before: Chain) -> Option<(usize, String)> {
+        let unit = self.units.running()?.to_owned();
+        let stage = self.entered(before)?;
+        let entered = self.settings.sections(before).get(stage)?;
+        let first = self.sections().first()?;
+        entered.same_commands(first).then_some((stage, unit))
+    }
+
+    /// The stage of this chain entered last, by the phase.
+    fn entered(&self, chain: Chain) -> Option<usize> {
+        match self.phase {
+            Phase::Counting { stage, .. }
+            | Phase::Announced { stage, .. }
+            | Phase::Waiting { stage, .. }
+            | Phase::Ready { stage, .. }
+            | Phase::Held { stage, .. } => stage.checked_sub(1),
+            Phase::Done => self.settings.sections(chain).len().checked_sub(1),
+            Phase::Active => None,
+        }
     }
 
     /// Wants every unit down; a unit whose command still runs is a warning.
@@ -584,9 +651,34 @@ impl Engine {
         out.extend(jobs.into_iter().map(Command::Job));
     }
 
-    /// The sections of the power source now.
+    /// A section for the journal: its name as in the file, and what it
+    /// does: `main.battery.1 (power save)`.
+    fn named(&self, stage: usize) -> String {
+        self.named_in(self.chain(), stage)
+    }
+
+    /// A section of a chain for the journal.
+    fn named_in(&self, chain: Chain, stage: usize) -> String {
+        let name = chain.section_name(stage);
+        match self
+            .settings
+            .sections(chain)
+            .get(stage)
+            .map(Section::shown_name)
+        {
+            Some(shown) if !shown.is_empty() => format!("{name} ({shown})"),
+            _ => name,
+        }
+    }
+
+    /// The chain in use: by the lid and the power source.
+    fn chain(&self) -> Chain {
+        self.settings.chain(self.lid_closed, section(self.power))
+    }
+
+    /// The sections of the chain in use.
     fn sections(&self) -> &[Section] {
-        self.settings.sections(section(self.power))
+        self.settings.sections(self.chain())
     }
 
     fn was_announced(&self) -> bool {
@@ -616,7 +708,7 @@ impl Engine {
         if inhibitors.is_empty() {
             return false;
         }
-        out.push(held_line(section, &inhibitors[0]));
+        out.push(held_line(&self.named(stage), &inhibitors[0]));
         self.phase = Phase::Held {
             stage,
             at: 0,
@@ -674,12 +766,15 @@ impl Engine {
     /// The line of the journal when the system becomes idle.
     fn idle_line(&self, now: u64) -> String {
         let (name, at) = self.scheduled();
+        let on = match self.chain().group {
+            Group::Main => power_name(self.power).to_owned(),
+            Group::Lid => format!("{}, the lid closed", power_name(self.power)),
+        };
         if name.is_empty() {
-            return format!("idle, on {}: no action", power_name(self.power));
+            return format!("idle, on {on}: no action");
         }
         format!(
-            "idle, on {}: {name} in {}",
-            power_name(self.power),
+            "idle, on {on}: {name} in {}",
             human(Duration::from_micros(at.saturating_sub(now)))
         )
     }
@@ -718,15 +813,12 @@ fn hold_of(section: &Section) -> Option<Hold> {
 }
 
 /// The journal line for an entry that waits for an inhibitor.
-fn held_line(section: &Section, inhibitor: &Inhibitor) -> Command {
+fn held_line(named: &str, inhibitor: &Inhibitor) -> Command {
     Command::Journal(
         Level::Info,
         format!(
-            "held: {} by {} (uid {}): \"{}\"",
-            section.shown_name(),
-            inhibitor.who,
-            inhibitor.uid,
-            inhibitor.why
+            "held: {named} by {} (uid {}): \"{}\"",
+            inhibitor.who, inhibitor.uid, inhibitor.why
         ),
     )
 }
@@ -737,6 +829,11 @@ fn section(power: PowerSource) -> Power {
         PowerSource::Battery => Power::Battery,
         PowerSource::Ac | PowerSource::Unknown => Power::Ac,
     }
+}
+
+/// The state of the lid in the journal and on the bus.
+pub fn lid_name(closed: bool) -> &'static str {
+    if closed { "closed" } else { "open" }
 }
 
 /// The name of a power source in the journal.

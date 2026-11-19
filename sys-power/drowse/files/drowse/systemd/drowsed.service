@@ -11,7 +11,7 @@ Type=dbus
 BusName=io.github.noktoborus.Drowse
 ExecStart=/usr/bin/drowsed
 Restart=on-failure
-TimeoutStopSec=10s
+TimeoutStopSec=30s
 
 [Install]
 WantedBy=multi-user.target

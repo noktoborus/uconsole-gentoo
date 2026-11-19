@@ -50,7 +50,9 @@ pub async fn connect() -> Result<(System, mpsc::UnboundedReceiver<Event>)> {
     let conn = Connection::system()
         .await
         .map_err(bus("connect to the system bus"))?;
-    let logind = LogindProxy::new(&conn)
+    let logind = LogindProxy::builder(&conn)
+        .cache_properties(zbus::proxy::CacheProperties::No)
+        .build()
         .await
         .map_err(bus("make the proxy of logind"))?;
     let upower = UPowerProxy::builder(&conn)
@@ -276,6 +278,13 @@ impl Login for System {
                 pid,
             })
             .collect())
+    }
+
+    async fn lid_closed(&self) -> Result<bool> {
+        self.logind
+            .lid_closed()
+            .await
+            .map_err(bus("read the lid of logind"))
     }
 
     async fn act(&self, action: LogindAction) -> std::result::Result<(), Refusal> {

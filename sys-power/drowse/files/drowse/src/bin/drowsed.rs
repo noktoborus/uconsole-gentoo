@@ -56,6 +56,6 @@ fn run_stage(instance: &str, part: Part) -> ExitCode {
 /// Says how to call the program.
 fn usage() -> ExitCode {
     eprintln!("usage: drowsed");
-    eprintln!("       drowsed stage enter|leave <battery-N|ac-N>");
+    eprintln!("       drowsed stage enter|leave <main|lid>.<battery|ac>.<n>");
     ExitCode::from(USAGE)
 }

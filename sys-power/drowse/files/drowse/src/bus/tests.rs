@@ -18,6 +18,7 @@ fn view(state: State, power: PowerSource) -> View {
         sessions: Vec::new(),
         inhibitors: Vec::new(),
         power,
+        lid_closed: false,
     }
 }
 
@@ -65,6 +66,7 @@ async fn the_properties_and_their_signatures() {
     assert_eq!(all["State"].value_signature().to_string(), "s");
     assert_eq!(all["ScheduledAction"].value_signature().to_string(), "(st)");
     assert_eq!(all["PowerSource"].value_signature().to_string(), "s");
+    assert_eq!(String::try_from(all["Lid"].clone()).unwrap(), "open");
     assert_eq!(String::try_from(all["State"].clone()).unwrap(), "idle");
     assert_eq!(
         String::try_from(all["PowerSource"].clone()).unwrap(),
@@ -119,12 +121,13 @@ async fn one_change_sends_one_signal_an_object() {
     let mut changes = state.receive_properties_changed().await.unwrap();
     let mut next = view(State::Announced, PowerSource::Ac);
     next.scheduled = ("poweroff".to_owned(), 99);
+    next.lid_closed = true;
     publish(&server, &next).await.unwrap();
     let signal = changes.next().await.unwrap();
     let args = signal.args().unwrap();
     let mut names: Vec<&str> = args.changed_properties().keys().copied().collect();
     names.sort_unstable();
-    assert_eq!(names, ["PowerSource", "ScheduledAction", "State"]);
+    assert_eq!(names, ["Lid", "PowerSource", "ScheduledAction", "State"]);
     let state_now: OwnedVariant = args.changed_properties()["State"].try_to_owned().unwrap();
     assert_eq!(String::try_from(state_now).unwrap(), "announced");
 }
