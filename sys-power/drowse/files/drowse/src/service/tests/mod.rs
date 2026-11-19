@@ -213,13 +213,29 @@ async fn the_stop_of_the_service_runs_the_resume() {
 
 #[tokio::test(start_paused = true)]
 async fn logind_gone_is_an_error() {
+    assert!(matches!(
+        ends_with(Event::LoginGone).await,
+        Err(Error::LogindGone)
+    ));
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_end_of_the_bus_is_an_error() {
+    assert!(matches!(
+        ends_with(Event::BusGone).await,
+        Err(Error::BusGone)
+    ));
+}
+
+/// What the service gives back after this event of the world.
+async fn ends_with(event: Event) -> Result<()> {
     let (world, mut events) = world(PowerSource::Ac);
-    let _ = world.events.send(Event::LoginGone);
+    let _ = world.events.send(event);
     let publisher = MockPublisher::default();
     let clock = TokioClock {
         base: Instant::now(),
     };
-    let result = run(
+    run(
         &world,
         &mut events,
         &publisher,
@@ -227,6 +243,5 @@ async fn logind_gone_is_an_error() {
         Settings::default(),
         std::future::pending(),
     )
-    .await;
-    assert!(matches!(result, Err(Error::LogindGone)));
+    .await
 }

@@ -338,6 +338,10 @@ timer that finds the same is silent.
 
 It writes:
 
+- **The start**: one line of the sources and the state: logind and
+  UPower on the bus or not, the power, the lid, the chain in use and its
+  sections, the verbosity, the units of sections left up and stopped.
+  It is `warning` when UPower does not answer, else `info`.
 - **A change of state**: idle or active, with the next section and its
   time; the power source or the lid, and whether the times moved or a
   section carried over; an entry held, with who holds it and why, and
@@ -345,7 +349,8 @@ It writes:
 - **The announce and the action**: the action announced; the action
   done.
 - **Why the action is cancelled**: a session in use (its id, user).
-- **A source that is not there**: logind not on the bus; UPower not
+- **A source that is not there**: logind not on the bus; the connection
+  to the system bus ended; UPower not
   there, so the power is taken as AC; an action that logind refuses,
   with its answer.
 - **A command of a section**: started; its `leave`; a stop that waits for
@@ -356,6 +361,7 @@ A source that comes back is written once, too.
 Examples:
 
 ```
+start: logind and upower on the bus; power: battery; lid: open; chain: main.battery, 2 sections; verbosity: info
 idle, on battery: poweroff in 17 min
 announce: poweroff in 2 min
 action: poweroff
@@ -364,7 +370,8 @@ power: AC; the times moved
 lid: closed; section main.battery.1 (power save) -> lid.battery.1 (power save): the same commands, none run; drowsed-stage@main.battery.1.service runs on
 idle, on battery, the lid closed: power save in 0 s
 idle, on AC: no action
-upower: no answer; the power is taken as AC
+upower: not on the bus; the power is taken as AC
+upower: back on the bus
 section main.battery.1 (power save): started
 held: main.battery.2 (poweroff) by drowse-inhibit (uid 1000): "held by hand"
 released: main.battery.2 (poweroff) now
@@ -379,11 +386,23 @@ bus are of `CLOCK_MONOTONIC`.
 The levels: a change of state is `info`; a cancel is `notice`; a source
 not there, a refusal, a command that waits or is killed is `warning`.
 
+A line that changes nothing outside the service is `debug`:
+
+- `idle, on …`: a count starts;
+- `cancel:` of a count, with no section entered, no announce and no
+  entry held in the journal; a cancel of those is `notice`;
+- `section …: waits for the leave of the section before`;
+- `power: …` or `lid: …; the times moved` while not idle.
+
+The least level written is the verbosity: `verbosity` of the settings
+file, or `drowsed --verbosity debug|info|notice|warning` in its place.
+It is `info` when neither sets it. An error is always written.
+
 ## Settings
 
 System settings only. A user has no settings of their own in the service.
 
-The file is `/etc/drowse.yaml`. It has `sessions.classes`, an optional
+The file is `/etc/drowse.yaml`. It has `verbosity`, `sessions.classes`, an optional
 `sections` library, and `main` and optional `lid` chains. Each chain has
 `battery` and `ac` lists. A chain not set is empty. `lid` is used with
 the lid closed (see "The lid"). With no file or an

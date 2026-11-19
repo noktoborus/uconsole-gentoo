@@ -122,6 +122,8 @@ pub enum Event {
     },
     /// logind left the bus.
     LoginGone,
+    /// The connection to the system bus ended.
+    BusGone,
 }
 
 /// logind: the sessions, the inhibitors and the actions of power.

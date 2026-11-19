@@ -7,6 +7,7 @@ use serde::de::{self, Visitor};
 use serde::{Deserialize, Deserializer};
 
 use crate::error::{Error, Result};
+use crate::journal::Level;
 
 use super::action::{Command, LogindAction};
 use super::chain::{Chain, Group, Power};
@@ -27,6 +28,8 @@ pub fn parse(text: &str) -> Result<SettingsFile> {
 /// The whole settings file.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SettingsFile {
+    /// The least level of the journal written.
+    pub verbosity: Level,
     /// The session classes that count.
     pub sessions: Sessions,
     /// Sections that chains can refer to with YAML aliases.
@@ -218,7 +221,12 @@ impl TryFrom<RawFile> for SettingsFile {
             .lid
             .map(|chains| chains.into_chains(Group::Lid))
             .transpose()?;
+        let verbosity = match raw.verbosity {
+            None => Level::default(),
+            Some(name) => Level::from_name(&name).ok_or(Error::SettingsVerbosity { name })?,
+        };
         let file = Self {
+            verbosity,
             sessions: Sessions {
                 classes: raw
                     .sessions
@@ -274,6 +282,7 @@ fn build_chain(raw: Vec<RawSection>, chain: Chain) -> Result<Vec<Section>> {
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawFile {
+    verbosity: Option<String>,
     #[serde(default)]
     sessions: RawSessions,
     #[serde(default)]

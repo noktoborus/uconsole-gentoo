@@ -9,13 +9,18 @@ use std::time::Duration;
 
 pub use units::{Job, unit_name};
 
+pub use crate::journal::Level;
 use crate::settings::{Chain, Group, LogindAction, Power, Section, SectionKind, Settings, Span};
 use crate::world::what::Hold;
 use crate::world::{Inhibitor, PowerSource, Session, SessionState};
 use units::{Ended, Units};
 
-/// The line of the journal when UPower does not answer.
-const UPOWER_GONE: &str = "upower: no answer; the power is taken as AC";
+/// The words of the journal when UPower does not answer; their pair is
+/// `UPOWER_BACK`.
+const UPOWER_GONE: &str = "upower: not on the bus; the power is taken as AC";
+
+/// The line of the journal when UPower answers again.
+const UPOWER_BACK: &str = "upower: back on the bus";
 
 /// The modes of an inhibitor that hold.
 const MODES_THAT_HOLD: [&str; 2] = ["block", "block-weak"];
@@ -71,17 +76,6 @@ pub struct View {
     pub power: PowerSource,
     /// Whether the lid is closed, as logind says.
     pub lid_closed: bool,
-}
-
-/// The level of a line of the journal.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Level {
-    /// A change of state.
-    Info,
-    /// A cancel.
-    Notice,
-    /// A source not there, a refusal, a command that waits or is killed.
-    Warning,
 }
 
 /// What the driver does.
@@ -155,7 +149,9 @@ pub struct Engine {
 
 impl Engine {
     /// The engine at the start of the service; the units of the stages left
-    /// up from before are stopped.
+    /// up from before are stopped. The first line of the journal says the
+    /// sources and the state at the start; it is a warning when UPower
+    /// does not answer.
     pub fn new(
         settings: Settings,
         power: PowerSource,
@@ -174,15 +170,19 @@ impl Engine {
             units: Units::default(),
             pending_logind: None,
         };
-        let mut out: Vec<Command> = engine
-            .units
-            .adopt_left_up(left_up)
-            .into_iter()
-            .map(Command::Job)
-            .collect();
-        if power == PowerSource::Unknown {
-            out.push(warning(UPOWER_GONE.to_owned()));
-        }
+        let start = engine.start_line(&left_up);
+        let mut out = vec![if power == PowerSource::Unknown {
+            warning(start)
+        } else {
+            info(start)
+        }];
+        out.extend(
+            engine
+                .units
+                .adopt_left_up(left_up)
+                .into_iter()
+                .map(Command::Job),
+        );
         (engine, out)
     }
 
@@ -203,7 +203,7 @@ impl Engine {
         if power != self.power && power == PowerSource::Unknown {
             out.push(warning(UPOWER_GONE.to_owned()));
         } else if power != self.power && self.power == PowerSource::Unknown {
-            out.push(info("upower: back on the bus".to_owned()));
+            out.push(info(UPOWER_BACK.to_owned()));
         }
         let before = self.chain();
         self.power = power;
@@ -436,7 +436,7 @@ impl Engine {
         if !self.is_idle() {
             if self.phase != Phase::Active {
                 out.push(Command::Journal(
-                    Level::Notice,
+                    self.cancel_level(),
                     format!("cancel: {}", self.what_holds()),
                 ));
                 self.stop_units(now, out);
@@ -454,7 +454,7 @@ impl Engine {
                 stage: 0,
                 base: start,
             };
-            out.push(info(self.idle_line(now)));
+            out.push(debug(self.idle_line(now)));
         }
         if let Phase::Held {
             stage,
@@ -544,7 +544,7 @@ impl Engine {
             self.enter(stage, now, out);
             return;
         }
-        out.push(info(format!(
+        out.push(debug(format!(
             "section {}: waits for the leave of the section before",
             self.named(stage)
         )));
@@ -624,7 +624,12 @@ impl Engine {
             return;
         }
         self.activity = now;
-        out.push(info(format!("{what}; the times moved")));
+        let level = if self.phase == Phase::Active {
+            Level::Debug
+        } else {
+            Level::Info
+        };
+        out.push(Command::Journal(level, format!("{what}; the times moved")));
     }
 
     /// The stage of `before` that is entered and the unit that runs it,
@@ -774,6 +779,43 @@ impl Engine {
         "activity".to_owned()
     }
 
+    /// The line of the journal at the start: the sources, the power, the
+    /// lid, the chain in use, the verbosity and the units left up.
+    fn start_line(&self, left_up: &[String]) -> String {
+        let sources = if self.power == PowerSource::Unknown {
+            format!("logind on the bus; {UPOWER_GONE}")
+        } else {
+            format!(
+                "logind and upower on the bus; power: {}",
+                power_name(self.power)
+            )
+        };
+        let chain = self.chain();
+        let mut line = format!(
+            "start: {sources}; lid: {}; chain: {}, {} sections; verbosity: {}",
+            lid_name(self.lid_closed),
+            chain.name(),
+            self.settings.sections(chain).len(),
+            self.settings.verbosity().name()
+        );
+        if !left_up.is_empty() {
+            line.push_str(&format!("; left up, stopped: {}", left_up.join(", ")));
+        }
+        line
+    }
+
+    /// The level of a cancel: `notice` when it cancels something, a
+    /// section entered, an announce or an entry held in the journal;
+    /// `debug` when only a count ran.
+    fn cancel_level(&self) -> Level {
+        let held_in_journal = matches!(self.phase, Phase::Held { logged: true, .. });
+        if self.entered(self.chain()).is_some() || self.was_announced() || held_in_journal {
+            Level::Notice
+        } else {
+            Level::Debug
+        }
+    }
+
     /// The line of the journal when the system becomes idle.
     fn idle_line(&self, now: u64) -> String {
         let (name, at) = self.scheduled();
@@ -869,6 +911,11 @@ fn human(duration: Duration) -> String {
         60..3600 => format!("{} min", seconds.div_ceil(60)),
         _ => format!("{} h {} min", seconds / 3600, (seconds % 3600) / 60),
     }
+}
+
+/// A line of the journal at the level `debug`.
+fn debug(text: String) -> Command {
+    Command::Journal(Level::Debug, text)
 }
 
 /// A line of the journal at the level `info`.

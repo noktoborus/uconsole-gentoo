@@ -7,6 +7,11 @@
 # announce starts; 2 min after it, the power save is left and the system
 # powers off, at 50 min of idle. On AC, nothing.
 
+# The least level of the journal written: debug, info, notice or
+# warning. `drowsed --verbosity <level>` overrides it. debug adds the
+# lines of a count that changes nothing: idle, its cancel, a wait.
+verbosity: info
+
 sessions:
   classes: [user, user-early, user-light, user-early-light, greeter]
 

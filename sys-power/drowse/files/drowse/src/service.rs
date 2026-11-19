@@ -75,9 +75,14 @@ impl Publish for BusPublisher {
     }
 }
 
-/// Runs the service on the real world until `SIGTERM`.
-pub async fn serve() -> Result<()> {
-    let settings = settings::load(Path::new(settings::PATH))?;
+/// Runs the service on the real world until `SIGTERM`. A verbosity
+/// given here is used in place of that of the settings file.
+pub async fn serve(verbosity: Option<Level>) -> Result<()> {
+    let mut settings = settings::load(Path::new(settings::PATH))?;
+    if let Some(level) = verbosity {
+        settings.set_verbosity(level);
+    }
+    journal::set_verbosity(settings.verbosity());
     let (system, mut events) = crate::world::system::connect().await?;
     let publisher = BusPublisher::new(system.connection().clone());
     let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
@@ -182,6 +187,7 @@ where
                 self.engine.on_job_ended(self.clock.now(), &unit, done)
             }
             Event::LoginGone => return Err(Error::LogindGone),
+            Event::BusGone => return Err(Error::BusGone),
         };
         self.execute(out).await;
         Ok(())

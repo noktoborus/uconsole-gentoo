@@ -144,7 +144,7 @@ fn the_idle_line_says_the_lid_is_closed() {
     let out = engine.on_snapshot(0, idle_world(0));
     assert!(has_line(
         &out,
-        Level::Info,
+        Level::Debug,
         "idle, on battery, the lid closed: lid save in 0 s"
     ));
 }

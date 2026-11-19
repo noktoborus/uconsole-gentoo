@@ -147,7 +147,8 @@ fn names_needed<'a>(mut names: impl Iterator<Item = &'a str>) -> bool {
     names.any(|name| MANAGER_PROPERTIES.contains(&name))
 }
 
-/// logind leaving the bus, and UPower coming or going.
+/// logind leaving the bus, UPower coming or going, and the end of the
+/// connection to the bus: the stream of the names ends with it.
 async fn follow_names(
     conn: &Connection,
     upower: UPowerProxy<'static>,
@@ -174,6 +175,7 @@ async fn follow_names(
                 return;
             }
         }
+        let _ = send.send(Event::BusGone);
     });
     Ok(())
 }

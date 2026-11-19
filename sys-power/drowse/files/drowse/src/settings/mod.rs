@@ -15,6 +15,7 @@ pub use time::Span;
 pub use yaml::{Chains, Section, SectionKind};
 
 use crate::error::{Error, Result};
+use crate::journal::Level;
 
 /// The path of the settings file.
 pub const PATH: &str = "/etc/drowse.yaml";
@@ -22,12 +23,24 @@ pub const PATH: &str = "/etc/drowse.yaml";
 /// The settings used by the running service.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Settings {
+    verbosity: Level,
     main: Chains,
     lid: Option<Chains>,
     classes: BTreeSet<String>,
 }
 
 impl Settings {
+    /// The least level of the journal written.
+    pub fn verbosity(&self) -> Level {
+        self.verbosity
+    }
+
+    /// Sets the least level of the journal written, in place of that of
+    /// the file.
+    pub fn set_verbosity(&mut self, level: Level) {
+        self.verbosity = level;
+    }
+
     /// Whether a session of this class counts in the idle state.
     pub fn counts_class(&self, class: &str) -> bool {
         self.classes.contains(class)
@@ -57,6 +70,7 @@ impl Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            verbosity: Level::default(),
             main: Chains::default(),
             lid: None,
             classes: sessions::default_classes(),
@@ -80,6 +94,7 @@ pub fn load(path: &Path) -> Result<Settings> {
 pub fn parse(text: &str) -> Result<Settings> {
     let file = yaml::parse(text)?;
     Ok(Settings {
+        verbosity: file.verbosity,
         main: file.main,
         lid: file.lid,
         classes: file.sessions.classes.into_iter().collect(),
@@ -120,6 +135,17 @@ mod tests {
     }
 
     #[test]
+    fn the_verbosity_is_info_unless_the_file_sets_it() {
+        assert_eq!(parse("").unwrap().verbosity(), Level::Info);
+        assert_eq!(
+            parse("verbosity: debug\n").unwrap().verbosity(),
+            Level::Debug
+        );
+        let error = parse("verbosity: loud\n").unwrap_err().to_string();
+        assert!(error.contains("loud"), "{error}");
+    }
+
+    #[test]
     fn no_file_is_empty() {
         let path = std::env::temp_dir().join(format!("drowse-no-file-{}", std::process::id()));
         assert_eq!(load(&path).unwrap(), Settings::default());
@@ -149,6 +175,7 @@ mod tests {
         assert_eq!(settings.sections(Chain::main(Power::Ac)).len(), 0);
         assert!(settings.counts_class("greeter"));
         assert!(!settings.counts_class("background"));
+        assert_eq!(settings.verbosity(), Level::Info);
 
         let file = yaml::parse(include_str!("../../etc/drowse.yaml")).unwrap();
         assert_eq!(file.sections.len(), 1);

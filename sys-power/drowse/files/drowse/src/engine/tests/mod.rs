@@ -383,10 +383,38 @@ fn no_session_is_idle() {
 }
 
 #[test]
+fn activity_in_a_count_is_a_debug_cancel() {
+    let mut engine = engine(TIMES, PowerSource::Battery);
+    engine.on_snapshot(0, idle_world(0));
+    let out = engine.on_snapshot(mins(5), busy_world(mins(5)));
+    assert!(has_line(
+        &out,
+        Level::Debug,
+        "cancel: session 1 (alice) in use"
+    ));
+}
+
+#[test]
+fn activity_after_an_entry_is_a_notice_cancel() {
+    let mut engine = engine(STAGES, PowerSource::Battery);
+    engine.on_snapshot(0, idle_world(0));
+    engine.on_job_ended(secs(1), POWER_SAVE, true);
+    let out = engine.on_snapshot(mins(2), busy_world(mins(2)));
+    assert!(has_line(&out, Level::Notice, "cancel:"));
+}
+
+#[test]
+fn a_change_of_power_while_active_moves_the_times_in_debug() {
+    let mut engine = engine(TIMES, PowerSource::Battery);
+    let out = engine.on_power(mins(3), PowerSource::Ac);
+    assert!(has_line(&out, Level::Debug, "power: AC; the times moved"));
+}
+
+#[test]
 fn never_is_idle_with_no_action() {
     let mut engine = engine(STAGES, PowerSource::Ac);
     let out = engine.on_snapshot(0, idle_world(0));
-    assert!(has_line(&out, Level::Info, "idle, on AC"));
+    assert!(has_line(&out, Level::Debug, "idle, on AC"));
     assert_eq!(engine.view().state, State::Idle);
     assert_eq!(engine.view().scheduled, (String::new(), 0));
     assert_eq!(engine.next_due(), None);
@@ -591,6 +619,25 @@ fn a_failed_command_is_a_warning_and_the_stages_go_on() {
 }
 
 #[test]
+fn the_start_is_one_line_of_the_sources_and_the_state() {
+    let settings = settings::parse(STAGES).unwrap();
+    let left_up = vec![POWER_SAVE.to_owned()];
+    let (_, out) = Engine::new(settings, PowerSource::Battery, false, 0, left_up);
+    let lines: Vec<_> = out
+        .iter()
+        .filter(|command| matches!(command, Command::Journal(..)))
+        .collect();
+    assert_eq!(lines.len(), 1);
+    assert!(has_line(
+        &out,
+        Level::Info,
+        "start: logind and upower on the bus; power: battery; lid: open; \
+         chain: main.battery, 3 sections; verbosity: info; \
+         left up, stopped: drowsed-stage@main.battery.1.service"
+    ));
+}
+
+#[test]
 fn upower_gone_and_back() {
     let (_, out) = Engine::new(
         settings::Settings::default(),
@@ -599,10 +646,10 @@ fn upower_gone_and_back() {
         0,
         Vec::new(),
     );
-    assert!(has_line(&out, Level::Warning, "upower: no answer"));
+    assert!(has_line(&out, Level::Warning, "upower: not on the bus"));
     let mut engine = engine(TIMES, PowerSource::Ac);
     let out = engine.on_power(0, PowerSource::Unknown);
-    assert!(has_line(&out, Level::Warning, "upower: no answer"));
+    assert!(has_line(&out, Level::Warning, "upower: not on the bus"));
     let out = engine.on_power(1, PowerSource::Ac);
     assert!(has_line(&out, Level::Info, "upower: back"));
 }
