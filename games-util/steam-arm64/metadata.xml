@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE pkgmetadata SYSTEM "https://www.gentoo.org/dtd/metadata.dtd">
+<pkgmetadata>
+	<maintainer type="person">
+		<email>noktoborus@gmail.com</email>
+	</maintainer>
+	<use>
+		<flag name="beta">The first run installs the client of the channel publicbeta of Valve, not the stable one</flag>
+	</use>
+</pkgmetadata>

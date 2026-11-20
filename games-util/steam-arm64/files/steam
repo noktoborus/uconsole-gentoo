@@ -1,0 +1,185 @@
+#!/bin/bash
+# Runs the native arm64 Steam client of Valve. On the first run it
+# installs the client into the Steam root of the user from the manifest of
+# Valve: the zip of each package, checked by its sha256. Then the client
+# keeps itself current.
+#
+#   steam [args of the client]
+#
+# Settings: /etc/steam-arm64.conf; the environment wins over it.
+#   STEAM_ARM64_CHANNEL  stable or publicbeta: the manifest of the first
+#                        install; publicbeta writes package/beta
+#   STEAM_ARM64_CDN      the host of the manifests and the packages
+set -u
+
+[[ -r /etc/steam-arm64.conf ]] && . /etc/steam-arm64.conf
+CHANNEL=${STEAM_ARM64_CHANNEL:-stable}
+CDN=${STEAM_ARM64_CDN:-https://client-update.fastly.steamstatic.com}
+DATA=${XDG_DATA_HOME:-$HOME/.local/share}
+ROOT=$DATA/Steam
+CLIENT=$ROOT/steamrtarm64/steam
+# libraries of the launcher, in a directory of its own in the Steam root:
+# not in the directories of the client, which an update of it replaces.
+# Gone, they are fetched again on the next run.
+LIB=$ROOT/steam-arm64/lib
+
+die() {
+	echo "steam: $*" >&2
+	exit 1
+}
+
+# The client has ELF files aligned below 16K: it runs on 4K pages only.
+check_pages() {
+	local size
+	size=$(getconf PAGESIZE)
+	[[ $size == 4096 ]] ||
+		die "the page size is $size; the arm64 client of Steam needs 4096 (a kernel of 4K pages)"
+}
+
+# A Steam root of the x86 client has its manifests in package/. Not
+# ubuntu12_32/: the arm64 client has it too.
+warn_x86() {
+	if compgen -G "$ROOT/package/steam_client_ubuntu12*" >/dev/null; then
+		echo "steam: $ROOT has files of the x86 client; the two clients share this root" >&2
+	fi
+}
+
+# Prints "<file> <sha256>" for each package of a manifest of Valve.
+packages() {
+	awk -F'"' '
+		$2 == "file" { file = $4 }
+		$2 == "sha2" && file != "" { print file, $4; file = "" }
+	' "$1"
+}
+
+# Some entries of the zips are named with backslashes
+# ("steamrtarm64\\libs\\libcurl.so"): unzip makes files of these names in
+# ROOT. Each file goes to its path; the empty directories of such names go.
+fix_names() {
+	local f t
+	while IFS= read -r -d '' f; do
+		t=$ROOT/$(basename "$f" | tr '\\' /)
+		mkdir -p "$(dirname "$t")" || die "cannot make the directory of $t"
+		mv -f "$f" "$t" || die "cannot move $f"
+	done < <(find "$ROOT" -maxdepth 1 ! -type d -name '*\\*' -print0)
+	find "$ROOT" -maxdepth 1 -type d -name '*\\*' -empty -delete
+}
+
+# Marks as executable each file that starts as an ELF or a script. The
+# head of a file is read by bash itself: a fork for each of some 10000
+# files is slow on an SD card.
+mark_exec() {
+	local f m
+	while IFS= read -r -d '' f; do
+		LC_ALL=C IFS= read -r -N 4 m <"$f" 2>/dev/null
+		[[ $m == $'\x7fELF' || $m == '#!'* ]] && printf '%s\0' "$f"
+	done < <(find "$ROOT" -type f ! -perm -u+x -print0) | xargs -0r chmod +x
+}
+
+# Installs the client of the channel into ROOT from the manifest of Valve.
+install_client() {
+	local name tmp file sum
+	case $CHANNEL in
+		stable) name=steam_client_linuxarm64 ;;
+		publicbeta) name=steam_client_publicbeta_linuxarm64 ;;
+		*) die "STEAM_ARM64_CHANNEL=$CHANNEL: stable or publicbeta" ;;
+	esac
+	echo "steam: the first run: the client of $CHANNEL into $ROOT (about 1 GB to fetch, 2.5 GB on disk)" >&2
+	mkdir -p "$ROOT/package" || die "cannot make $ROOT"
+	tmp=$(mktemp -d "$ROOT/package/.steam-arm64.XXXXXX") || die "no temporary directory"
+	trap 'rm -rf "$tmp"' EXIT
+	curl -fsSL --retry 3 -o "$tmp/$name" "$CDN/$name" || die "cannot fetch $CDN/$name"
+	packages "$tmp/$name" >"$tmp/list"
+	[[ -s $tmp/list ]] || die "$name has no packages"
+	while read -r file sum; do
+		echo "steam: $file" >&2
+		curl -fsSL --retry 3 -o "$tmp/$file" "$CDN/$file" || die "cannot fetch $file"
+		echo "$sum  $tmp/$file" | sha256sum -c --quiet - || die "$file: wrong sha256"
+		unzip -qqo "$tmp/$file" -d "$ROOT" || die "cannot unpack $file"
+		rm -f "$tmp/$file"
+	done <"$tmp/list"
+	fix_names
+	# unzip takes the modes of the zips (0666 for many files), not the umask
+	chmod -R go-w "$ROOT" || die "cannot set the modes in $ROOT"
+	mark_exec
+	# the client keeps the manifest it was installed from
+	cp "$tmp/$name" "$ROOT/package/$name.manifest"
+	[[ $CHANNEL == stable ]] || echo "$CHANNEL" >"$ROOT/package/beta"
+	[[ -x $CLIENT ]] || die "no $CLIENT after the install"
+	rm -rf "$tmp"
+	trap - EXIT
+}
+
+# The tray: steamui.so loads libappindicator.so.1 (GTK 2) by dlopen; the
+# system has only the GTK 3 one. The arm64 runtime of Valve has the GTK 2
+# libayatana-appindicator, the same API: it and libayatana-indicator go
+# to LIB from runtime_steamrtarm64_linuxarm64 of the manifest publicbeta
+# (stable has no arm64 runtime). libdbusmenu-gtk.so.4 (GTK 2) and
+# libdbusmenu-glib.so.4 come from the system. A failure only warns: the
+# client runs with no tray.
+setup_tray() {
+	local name=steam_client_publicbeta_linuxarm64 tmp file sum dir
+	[[ -e $LIB/libappindicator.so.1 && -e $LIB/libayatana-indicator.so.7 ]] && return
+	echo "steam: the libraries of the tray from the arm64 runtime of Valve (about 90 MB to fetch)" >&2
+	mkdir -p "$LIB" && tmp=$(mktemp -d "$LIB/.tray.XXXXXX") || {
+		echo "steam: cannot make $LIB; no tray" >&2
+		return
+	}
+	if curl -fsSL --retry 3 -o "$tmp/$name" "$CDN/$name" &&
+		read -r file sum < <(packages "$tmp/$name" | grep '^runtime_steamrtarm64_linuxarm64\.zip') &&
+		curl -fsSL --retry 3 -o "$tmp/$file" "$CDN/$file" &&
+		echo "$sum  $tmp/$file" | sha256sum -c --quiet - &&
+		unzip -qqoj "$tmp/$file" '*/files/lib/aarch64-linux-gnu/libayatana-appindicator.so.1.0.0' \
+			'*/files/lib/aarch64-linux-gnu/libayatana-indicator.so.7.0.0' -d "$tmp/lib" &&
+		dir=$tmp/lib && [[ -f $dir/libayatana-appindicator.so.1.0.0 && -f $dir/libayatana-indicator.so.7.0.0 ]]; then
+		chmod 0755 "$dir"/*
+		mv -f "$dir/libayatana-indicator.so.7.0.0" "$LIB/libayatana-indicator.so.7"
+		mv -f "$dir/libayatana-appindicator.so.1.0.0" "$LIB/libappindicator.so.1"
+	else
+		echo "steam: no libraries of the tray; the client runs with no tray" >&2
+	fi
+	rm -rf "$tmp"
+}
+
+# The links of ~/.steam that the client and the games look for.
+link_home() {
+	mkdir -p "$HOME/.steam"
+	ln -sfn "$ROOT" "$HOME/.steam/root"
+	ln -sfn "$ROOT" "$HOME/.steam/steam"
+	ln -sfn "$ROOT/linuxarm64" "$HOME/.steam/sdkarm64"
+	ln -sfn "$ROOT/steamrtarm64" "$HOME/.steam/bin64"
+}
+
+# The icon of the desktop entry, from the files of the client.
+link_icon() {
+	local dir=$DATA/icons/hicolor/256x256/apps
+	[[ -e $dir/steam.png || ! -f $ROOT/public/steam_tray_posix.png ]] && return
+	mkdir -p "$dir" && cp "$ROOT/public/steam_tray_posix.png" "$dir/steam.png"
+}
+
+# Runs the client; exit 42 asks for a restart (after an update). Five
+# restarts within 10 s each in a row stop it.
+run() {
+	local rc quick=0 start
+	export PATH=$ROOT/steamrtarm64/pv-runtime/steam-runtime-steamrt/bin:$PATH
+	export LD_LIBRARY_PATH=$ROOT/steamrtarm64:$LIB${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+	while :; do
+		start=$SECONDS
+		"$CLIENT" "$@"
+		rc=$?
+		[[ $rc == 42 ]] || exit "$rc"
+		if ((SECONDS - start < 10)); then
+			((++quick < 5)) || die "the client asked for a restart 5 times in a row"
+		else
+			quick=0
+		fi
+	done
+}
+
+check_pages
+warn_x86
+[[ -x $CLIENT ]] || install_client
+setup_tray
+link_home
+link_icon
+run "$@"

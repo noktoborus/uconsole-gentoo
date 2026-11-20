@@ -1,6 +1,7 @@
 # This file is generated from the metadata.xml of the packages.
 # Do not edit by hand: run use-local-desc.py of the skill gentoo-overlay.
 dev-libs/date:only-c-locale - Build only the C locale
+games-util/steam-arm64:beta - The first run installs the client of the channel publicbeta of Valve, not the stable one
 gui-apps/swaync:pulseaudio - Build the volume widget of the control center with media-libs/libpulse
 gui-apps/waybar:backlight - Enable module that controls the current backlight level
 gui-apps/waybar:evdev - Enable libevdev support for evdev related features
