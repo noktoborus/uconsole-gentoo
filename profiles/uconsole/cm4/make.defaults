@@ -1,0 +1,13 @@
+# The CM4: BCM2711, 4x Cortex-A72 (ARMv8.0-A), no crypto extension. The
+# same flags on the builder and on the uConsole, or the binary packages
+# do not fit. Not yet checked by cpuid2cpuflags on a CM4.
+COMMON_FLAGS="-O2 -pipe -mcpu=cortex-a72"
+CFLAGS="${COMMON_FLAGS}"
+CXXFLAGS="${COMMON_FLAGS}"
+FCFLAGS="${COMMON_FLAGS}"
+FFLAGS="${COMMON_FLAGS}"
+RUSTFLAGS="-C target-cpu=cortex-a72"
+GOARM64="v8.0"
+# -* drops the list of arm64.
+CPU_FLAGS_ARM="-* asimd crc32 edsp neon thumb thumb2 v4 v5 v6 v7 v8 vfp vfp-d32 vfpv3 vfpv4"
+VIDEO_CARDS="-* v3d vc4"

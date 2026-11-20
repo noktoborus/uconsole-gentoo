@@ -1,0 +1,141 @@
+upower gives a time to empty to a battery in any state but charging. A
+full battery on AC then gets one too: the small current that still flows
+into the cells is taken as a discharge, and upower shows days to empty.
+This gives the time to empty only when the battery can discharge: not
+when it is fully charged, and not when it is pending a charge. The time
+is worked out after the guesses of the state, so it uses the state that
+is shown. up_daemon_update_display_battery() does the same for more than
+one battery. A test is added to src/linux/integration-test.py.
+
+diff --git a/src/linux/integration-test.py b/src/linux/integration-test.py
+index 815fd49..a3cc49a 100755
+--- a/src/linux/integration-test.py
++++ b/src/linux/integration-test.py
+@@ -1565,6 +1565,74 @@ class Tests(dbusmock.DBusTestCase):
+         )
+         self.stop_daemon()
+ 
++    def test_no_time_to_empty_when_full_on_ac(self):
++        """No time to empty for a full or idle battery with a rest current"""
++
++        ac = self.testbed.add_device(
++            "power_supply",
++            "AC",
++            None,
++            ["type", "Mains", "online", "1"],
++            [],
++        )
++        bat0 = self.testbed.add_device(
++            "power_supply",
++            "BAT0",
++            None,
++            [
++                "type",
++                "Battery",
++                "present",
++                "1",
++                "status",
++                "Full",
++                "energy_full",
++                "32000000",
++                "energy_full_design",
++                "32000000",
++                "energy_now",
++                "32000000",
++                "capacity",
++                "100",
++                "power_now",
++                "63000",
++                "voltage_now",
++                "4200000",
++            ],
++            [],
++        )
++
++        self.start_daemon()
++        devs = self.proxy.EnumerateDevices()
++        self.assertEqual(len(devs), 2)
++        bat0_up = [d for d in devs if "BAT" in d][0]
++        self.assertEqual(
++            self.get_dbus_dev_property(bat0_up, "State"), UP_DEVICE_STATE_FULLY_CHARGED
++        )
++        self.assertEqual(self.get_dbus_dev_property(bat0_up, "TimeToEmpty"), 0)
++        self.assertEqual(self.get_dbus_display_property("TimeToEmpty"), 0)
++        self.stop_daemon()
++
++        # "Not charging" at 95 % is shown as fully charged, with no time either
++        self.testbed.set_attribute(bat0, "status", "Not charging")
++        self.testbed.set_attribute(bat0, "capacity", "95")
++        self.testbed.set_attribute(bat0, "energy_now", "30400000")
++        self.start_daemon()
++        self.assertEqual(
++            self.get_dbus_dev_property(bat0_up, "State"), UP_DEVICE_STATE_FULLY_CHARGED
++        )
++        self.assertEqual(self.get_dbus_dev_property(bat0_up, "TimeToEmpty"), 0)
++        self.stop_daemon()
++
++        # a discharge still has its time
++        self.testbed.set_attribute(ac, "online", "0")
++        self.testbed.set_attribute(bat0, "status", "Discharging")
++        self.testbed.set_attribute(bat0, "energy_now", "30000000")
++        self.testbed.set_attribute(bat0, "power_now", "7500000")
++        self.start_daemon()
++        self.assertEqual(self.get_dbus_dev_property(bat0_up, "TimeToEmpty"), 14400)
++        self.stop_daemon()
++
+     def test_battery_charge(self):
+         """battery which reports charge instead of energy
+ 
+diff --git a/src/up-device-battery.c b/src/up-device-battery.c
+index 5401026..4359c33 100644
+--- a/src/up-device-battery.c
++++ b/src/up-device-battery.c
+@@ -366,21 +366,6 @@ up_device_battery_report (UpDeviceBattery *self,
+ 	priv->hw_data_len = MIN (priv->hw_data_len + 1, G_N_ELEMENTS (priv->hw_data));
+ 	priv->hw_data[priv->hw_data_last] = *values;
+ 
+-	if (values->energy.rate > 0.01) {
+-		/* Calculate time to full/empty
+-		 *
+-		 * Here we could factor in collected data about charge rates
+-		 * FIXME: Use charge-stop-threshold here
+-		 */
+-		if (values->state == UP_DEVICE_STATE_CHARGING)
+-			time_to_full = 3600 * (priv->energy_full - values->energy.cur) / values->energy.rate;
+-		else
+-			time_to_empty = 3600 * values->energy.cur / values->energy.rate;
+-	} else {
+-		if (values->state == UP_DEVICE_STATE_CHARGING || values->state == UP_DEVICE_STATE_DISCHARGING)
+-			priv->repoll_needed = TRUE;
+-	}
+-
+ 	/* QUIRK: Do a FULL/EMPTY guess if the state is still unknown
+ 	 *        Maybe limit to when we have good estimates
+ 	 *        (would require rate/current information) */
+@@ -395,6 +380,26 @@ up_device_battery_report (UpDeviceBattery *self,
+ 	if (values->state == UP_DEVICE_STATE_PENDING_CHARGE && values->percentage >= UP_FULLY_CHARGED_THRESHOLD)
+ 		values->state = UP_DEVICE_STATE_FULLY_CHARGED;
+ 
++	if (values->energy.rate > 0.01) {
++		/* Calculate time to full/empty
++		 *
++		 * Here we could factor in collected data about charge rates
++		 * FIXME: Use charge-stop-threshold here
++		 *
++		 * NOTE: A full or idle battery on AC has no time to empty, even
++		 * if a small rest current flows. Keep in sync with
++		 * up_daemon_update_display_battery().
++		 */
++		if (values->state == UP_DEVICE_STATE_CHARGING)
++			time_to_full = 3600 * (priv->energy_full - values->energy.cur) / values->energy.rate;
++		else if (values->state != UP_DEVICE_STATE_FULLY_CHARGED &&
++			 values->state != UP_DEVICE_STATE_PENDING_CHARGE)
++			time_to_empty = 3600 * values->energy.cur / values->energy.rate;
++	} else {
++		if (values->state == UP_DEVICE_STATE_CHARGING || values->state == UP_DEVICE_STATE_DISCHARGING)
++			priv->repoll_needed = TRUE;
++	}
++
+ 	/* Set the main properties (setting "update-time" last) */
+ 	g_object_set (self,
+ 		      "energy", values->energy.cur,

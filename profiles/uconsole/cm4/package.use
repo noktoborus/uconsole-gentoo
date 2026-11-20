@@ -1,0 +1,3 @@
+# The board of the kernel and of the firmware of this repository.
+sys-kernel/uconsole-pi-kernel cm4
+sys-boot/uconsole-pi-firmware cm4

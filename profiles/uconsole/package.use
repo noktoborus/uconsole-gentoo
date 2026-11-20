@@ -1,0 +1,7 @@
+# The modules of the kernel from packages (linux-mod-r1) depend on
+# virtual/dist-kernel:=, so they are built again for each new kernel;
+# compressed as the kernel compresses its own (CONFIG_MODULE_COMPRESS_XZ).
+*/* dist-kernel modules-compress
+# No initramfs: the kernel boots with none; with dist-kernel the firmware
+# would try to make one.
+sys-kernel/linux-firmware -initramfs

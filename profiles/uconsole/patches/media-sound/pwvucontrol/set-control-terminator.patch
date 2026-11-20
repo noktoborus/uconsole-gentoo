@@ -1,0 +1,31 @@
+Stream::set_control of pipewire-rs (0.9.2, 0.10.1) calls the variadic
+pw_stream_set_control with no 0 at the end of its list. The C side reads
+the next registers as more controls; on aarch64 they hold garbage, and
+pwvucontrol crashes once it connects to PipeWire. This calls the C
+function with the 0. The fix of the crate itself cannot be applied here:
+eapply_user patches only the sources of the package.
+
+--- a/src/ui/levelprovider.rs
++++ b/src/ui/levelprovider.rs
+@@ -88,8 +88,19 @@
+                 }),
+             )
+             .param_changed(|stream, _, _, _| {
+-                let _ = stream.set_control(pipewire::spa::sys::SPA_PROP_channelVolumes, &[1.0]);
+-
++                // Stream::set_control of pipewire-rs 0.9/0.10 does not end the
++                // variadic arguments of pw_stream_set_control with 0. The C side
++                // then reads garbage; on aarch64 it crashes.
++                let mut values = [1.0f32];
++                unsafe {
++                    pipewire::sys::pw_stream_set_control(
++                        stream.as_raw_ptr(),
++                        pipewire::spa::sys::SPA_PROP_channelVolumes,
++                        values.len() as u32,
++                        values.as_mut_ptr(),
++                        0u32,
++                    );
++                }
+             })
+             .register()?;
+ 

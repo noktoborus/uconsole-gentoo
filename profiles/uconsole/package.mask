@@ -1,0 +1,6 @@
+# The kernel is sys-kernel/uconsole-pi-kernel: virtual/dist-kernel and
+# virtual/linux-sources of this repository point to it. Those of gentoo
+# point to the kernels of gentoo, and a package of a module would pull
+# gentoo-sources.
+virtual/dist-kernel::gentoo
+virtual/linux-sources::gentoo

@@ -1,0 +1,17 @@
+# The CM5: BCM2712, 4x Cortex-A76 (ARMv8.2-A). The same flags on the
+# builder and on the uConsole, or the binary packages do not fit.
+# -mcpu=cortex-a76 sets the ISA (dotprod, fp16, rcpc) and the tuning. GCC
+# does not add AES and SHA2 for cortex-a76; the BCM2712 has them, so
+# +crypto.
+COMMON_FLAGS="-O2 -pipe -mcpu=cortex-a76+crypto"
+CFLAGS="${COMMON_FLAGS}"
+CXXFLAGS="${COMMON_FLAGS}"
+FCFLAGS="${COMMON_FLAGS}"
+FFLAGS="${COMMON_FLAGS}"
+RUSTFLAGS="-C target-cpu=cortex-a76 -C target-feature=+aes,+sha2"
+GOARM64="v8.2,crypto"
+# What cpuid2cpuflags gives on a Cortex-A76 with crypto (HWCAP: asimd aes
+# pmull sha1 sha2 crc32 asimdhp asimddp). -* drops the list of arm64.
+CPU_FLAGS_ARM="-* aes asimd asimddp asimdhp crc32 edsp neon neon-fp16 sha1 sha2 thumb thumb2 v4 v5 v6 v7 v8 vfp vfp-d32 vfpv3 vfpv4"
+# v3d: the GPU; vc4: the display side of the same stack.
+VIDEO_CARDS="-* v3d vc4"

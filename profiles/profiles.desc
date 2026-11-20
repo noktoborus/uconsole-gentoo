@@ -1,0 +1,4 @@
+# The profiles of the uConsole, one for each board: the CPU, the board of
+# the kernel and the firmware; the desktop and systemd of gentoo.
+arm64	uconsole/cm5/desktop/systemd	exp
+arm64	uconsole/cm4/desktop/systemd	exp
