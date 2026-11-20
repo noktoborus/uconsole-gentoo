@@ -18,6 +18,7 @@ RDEPEND="
 	sys-firmware/bluez-firmware
 	sys-power/axp22x-soft-battery
 	sys-power/axp22x-soft-battery-daemon
+	sys-apps/dtc
 	net-misc/networkmanager
 	uconsole/networkmanager-settings
 	net-dns/avahi
