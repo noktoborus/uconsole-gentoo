@@ -8,8 +8,8 @@
 # The preset enables the service, its config watcher and its start after
 # sleep.
 #
-# The source is a copy of drowse in files/drowse, with the sum below;
-# CRATES is its Cargo.lock. The modes of files/ are not kept.
+# The source is the commit MY_COMMIT of github.com/noktoborus/drowse;
+# CRATES is its Cargo.lock.
 # /etc/drowse.yaml holds the YAML chains; /etc is
 # in CONFIG_PROTECT, so a change made on the device is kept on an update.
 #
@@ -152,10 +152,15 @@ CRATES="
 
 inherit cargo systemd
 
+MY_COMMIT="d1b1dfed927930b7181029cd8e77b0ba37630376"
+
 DESCRIPTION="Enters the sections of its chains while every session of logind is idle"
-HOMEPAGE="https://www.clockworkpi.com/uconsole"
-SRC_URI="${CARGO_CRATE_URIS}"
-S=${WORKDIR}/drowse
+HOMEPAGE="https://github.com/noktoborus/drowse"
+SRC_URI="
+	https://github.com/noktoborus/drowse/archive/${MY_COMMIT}.tar.gz -> ${PN}-${MY_COMMIT}.tar.gz
+	${CARGO_CRATE_URIS}
+"
+S=${WORKDIR}/${PN}-${MY_COMMIT}
 
 LICENSE="MIT"
 # the crates
@@ -176,13 +181,6 @@ RDEPEND="
 	waybar? ( gui-apps/waybar )
 "
 BDEPEND="virtual/pkgconfig"
-
-# files/ sha256: 06face64347e2cc61170ac59303b51aa15456a33f3e096fddf5eb452e01ddafe
-
-src_unpack() {
-	cargo_src_unpack
-	cp -r --no-preserve=mode "${FILESDIR}"/drowse/. "${S}" || die
-}
 
 src_install() {
 	cargo_src_install

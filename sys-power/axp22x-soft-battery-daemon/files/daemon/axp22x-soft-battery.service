@@ -1,9 +1,0 @@
-[Unit]
-Description=Learning of the cells of the battery of the uConsole
-
-[Service]
-ExecStart=/usr/bin/axp22x-soft-battery daemon
-StateDirectory=axp22x-soft-battery
-
-[Install]
-WantedBy=multi-user.target

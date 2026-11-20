@@ -3,9 +3,8 @@
 # runs, writes the overlay of the curves (gen-dts), and powers the system
 # off when the AXP is gone. The service is enabled by a preset.
 #
-# The source is a copy of daemon/ of axp22x-soft-battery in
-# files/daemon, with the sum below;
-# CRATES is Cargo.lock.
+# The source is daemon/ of the commit MY_COMMIT of
+# github.com/noktoborus/axp22x-soft-battery; CRATES is its Cargo.lock.
 
 EAPI=8
 
@@ -15,10 +14,15 @@ CRATES="
 
 inherit cargo systemd
 
+MY_COMMIT="7289c2c1c28609d9bb3433fb3d8a670523727ee4"
+
 DESCRIPTION="Learns the cells of the uConsole from the ADC of the AXP22x"
-HOMEPAGE="https://www.clockworkpi.com/uconsole"
-SRC_URI="${CARGO_CRATE_URIS}"
-S=${WORKDIR}/daemon
+HOMEPAGE="https://github.com/noktoborus/axp22x-soft-battery"
+SRC_URI="
+	https://github.com/noktoborus/axp22x-soft-battery/archive/${MY_COMMIT}.tar.gz -> axp22x-soft-battery-${MY_COMMIT}.tar.gz
+	${CARGO_CRATE_URIS}
+"
+S=${WORKDIR}/axp22x-soft-battery-${MY_COMMIT}/daemon
 
 LICENSE="GPL-2"
 # the crates
@@ -27,14 +31,6 @@ SLOT="0"
 KEYWORDS="arm64"
 
 RDEPEND="sys-power/axp22x-soft-battery"
-
-# files/ sha256: 780f176476debd5e05d8d867333d9cee96adf63beedf9abcdbc85544deb03cfe
-
-src_unpack() {
-	cargo_src_unpack
-	# the modes of files/ are not kept, as in sys-power/axp22x-soft-battery
-	cp -r --no-preserve=mode "${FILESDIR}"/daemon/. "${S}" || die
-}
 
 src_install() {
 	cargo_src_install
