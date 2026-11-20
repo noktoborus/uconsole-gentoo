@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE pkgmetadata SYSTEM "https://www.gentoo.org/dtd/metadata.dtd">
+<pkgmetadata>
+	<maintainer type="person">
+		<email>noktoborus@gmail.com</email>
+	</maintainer>
+	<longdescription>The settings of emerge for ccache, in /etc/portage/env and /etc/portage/package.env, and its directories.</longdescription>
+</pkgmetadata>

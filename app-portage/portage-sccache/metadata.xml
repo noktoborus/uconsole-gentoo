@@ -4,5 +4,5 @@
 	<maintainer type="person">
 		<email>noktoborus@gmail.com</email>
 	</maintainer>
-	<longdescription>The directories of sccache and their rule of the sandbox, for emerge with userpriv. See gentoo-builder/README.md of the project.</longdescription>
+	<longdescription>The settings of emerge for sccache, in /etc/portage/env and /etc/portage/package.env, and its directories.</longdescription>
 </pkgmetadata>

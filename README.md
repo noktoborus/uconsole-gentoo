@@ -10,7 +10,8 @@ lacks. On the uConsole it is `/var/db/repos/uconsole`.
 | `virtual/linux-sources` | nothing: it points to `sys-kernel/uconsole-pi-kernel`, so a package of a module does not pull `gentoo-sources` |
 | `sys-boot/uconsole-pi-firmware` | `/boot/config.txt`, `/boot/cmdline.txt`, the firmware of the CM4 |
 | `gui-wm/uconsole-pi-desktop` | sway, greetd, the keyring and the agent of SSH, Flathub, DNS by resolved, mDNS by avahi, the presets of the services; its dependencies are the desktop |
-| `dev-util/sccache-portage-sandbox` | the directories and the sandbox rule of sccache |
+| `app-portage/portage-ccache` | emerge builds C and C++ under ccache: `/etc/portage/env/portage-ccache.conf` (`FEATURES=ccache`, `CCACHE_DIR`) for `*/*` of `package.env`, `/var/cache/ccache` |
+| `app-portage/portage-sccache` | emerge builds Rust under sccache: `/etc/portage/env/portage-sccache.conf` for `*/*` of `package.env`, none for `dev-lang/rust` and `dev-util/sccache`, the sandbox rule, `/var/cache/sccache`, `/var/tmp/portage/sccache` by tmpfiles |
 | `sys-power/axp22x-soft-battery` | the module `axp22x_soft_battery` (the battery by a model of the device tree), `/etc/modprobe.d/axp22x-soft-battery.conf` (blacklist of `axp20x_battery`), `/boot/overlays/axp22x-soft-battery.dtbo`; not yet tried on the device; its source is axp22x-soft-battery |
 | `sys-power/axp22x-soft-battery-daemon` | `/usr/bin/axp22x-soft-battery` (the learning of the cells, `gen-dts`, `import`), its service and preset; not yet tried on the device |
 | `sys-power/drowse` | `drowsed` (while every session of logind is idle, the actions of its stages: a command and its undo, an action of power; its state on the system bus), `drowse-inhibit`, `drowse-status` (also for waybar), the units, the preset, the policy of D-Bus; not yet tried on the device; its source is drowse |
