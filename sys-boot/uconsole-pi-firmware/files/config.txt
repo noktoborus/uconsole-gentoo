@@ -57,7 +57,7 @@ gpio=10=ip,np
 gpio=11=op,dl
 gpio=9=op,dh
 
-# The kernel with 16K pages (sys-kernel/uconsole-pi-kernel, USE 16k), for
+# The kernel with 16K pages (sys-kernel/uconsole-pi-kernel, USE cm5-16k), for
 # one boot only: sudo reboot '0 tryboot'. The boot after it takes
 # kernel_2712.img again. To keep it, put the line under [pi5] above.
 [pi5]
