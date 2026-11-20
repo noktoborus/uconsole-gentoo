@@ -2,7 +2,7 @@
 # Distributed under the terms of the GNU General Public License v2
 # From the gentoo repository (gnome-extra/gnome-power-manager, 2026-11-20):
 # it has no arm64 there; the desktop of the uConsole needs it. KEYWORDS
-# amd64 and arm64.
+# amd64 and arm64. files/: Power Statistics in the menu of sway too.
 
 EAPI=8
 
@@ -39,6 +39,10 @@ BDEPEND="
 
 # docbook-sgml-utils and docbook-sgml-dtd-4.1 used for creating man pages
 # (files under ${S}/man).
+
+PATCHES=(
+	"${FILESDIR}"/${P}-add-sway.patch
+)
 
 src_configure() {
 	local emesonargs=(
