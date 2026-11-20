@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE catmetadata SYSTEM "https://www.gentoo.org/dtd/metadata.dtd">
+<catmetadata>
+	<longdescription lang="en">
+		The uconsole category holds the settings of programs on the
+		ClockworkPi uConsole, and the packages that bring its system and
+		its desktop.
+	</longdescription>
+</catmetadata>

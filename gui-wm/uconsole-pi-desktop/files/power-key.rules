@@ -1,5 +1,0 @@
-# /usr/lib/udev/rules.d/60-uconsole-power-key.rules: the AXP228 cuts the
-# power after the key is held 10 s, not 6 s: logind powers off after 5 s
-# (logind.conf.d/50-uconsole.conf), and a cut at 6 s would come in the
-# middle of it. 10 s stays the way out of a hang.
-ACTION=="add|bind", SUBSYSTEM=="platform", DRIVER=="axp20x-pek", ATTR{shutdown}="10000"

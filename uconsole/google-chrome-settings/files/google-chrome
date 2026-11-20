@@ -1,0 +1,38 @@
+# The settings of the uConsole for Google Chrome, put into the files of
+# www-client/google-chrome after its src_install. Portage sources this
+# file in each phase of that package (/etc/portage/env/www-client/).
+# The package has no sources: it unpacks the .deb in src_install, so a
+# patch has nothing to apply to. The files stay of the package; a new
+# version of Chrome takes them again.
+#
+# - ECH off: the policy EncryptedClientHelloEnabled=false, in
+#   /etc/opt/chrome/policies/managed/ (chrome://policy shows it).
+# - A second entry of the menu, "Google Chrome (webgpu)": the .desktop of
+#   the package with the flags of WebGPU in each Exec. Chrome warns of
+#   --enable-unsafe-webgpu in a bar ("unsupported command-line flag"): the
+#   GPU of WebGPU has no sandbox in Chromium. The entry handles no type
+#   of file (no MimeType), so it is never the browser by default. The
+#   plain entry stays as it is.
+
+UCONSOLE_CHROME_WEBGPU_FLAGS="--enable-unsafe-webgpu --enable-features=Vulkan"
+
+post_src_install() {
+	insinto /etc/opt/chrome/policies/managed
+	newins - uconsole.json <<-EOF_POLICY
+		{ "EncryptedClientHelloEnabled": false }
+	EOF_POLICY
+
+	local apps="${ED}/usr/share/applications"
+	local plain="${apps}/google-chrome.desktop"
+	local webgpu="${apps}/google-chrome-webgpu.desktop"
+	[[ -f ${plain} ]] || die "uconsole: no ${plain}"
+	awk -v flags="${UCONSOLE_CHROME_WEBGPU_FLAGS}" '
+		/^\[/ { section = $0 }
+		section == "[Desktop Entry]" && /^Name(\[[^]]*\])?=/ { print $0 " (webgpu)"; next }
+		section == "[Desktop Entry]" && /^MimeType=/ { next }
+		/^Exec=/ { sub(/^Exec=[^ ]+/, "& " flags) }
+		{ print }
+	' "${plain}" > "${webgpu}" || die
+	grep -q "^Exec=.* ${UCONSOLE_CHROME_WEBGPU_FLAGS}" "${webgpu}" \
+		|| die "uconsole: no Exec with the flags in ${webgpu}"
+}

@@ -1,0 +1,21 @@
+# /etc/greetd/sway-config: the sway of the login screen. ReGreet asks the
+# user, the password and the session (/usr/share/wayland-sessions); greetd
+# then starts the session of the user, and this sway exits. The panel,
+# the backlight and the lid as in the session, from /etc/sway/config.d.
+exec dbus-update-activation-environment --systemd WAYLAND_DISPLAY SWAYSOCK XDG_CURRENT_DESKTOP=sway
+
+include /etc/sway/config.d/40-uconsole-output.conf
+include /etc/sway/config.d/50-uconsole-backlight.conf
+include /etc/sway/config.d/50-uconsole-bindings.conf
+
+exec "regreet; swaymsg exit"
+
+# The screen is idle for logind (drowse sees it); after 10 minutes with no
+# one at it, power off.
+exec swayidle -w \
+    idlehint 1 \
+    timeout 600 'systemctl poweroff'
+
+# Power off or reboot from the login screen: Super+Shift+e.
+bindsym Mod4+Shift+e exec swaynag -t warning -m 'Power' \
+    -b 'Power off' 'systemctl poweroff' -b 'Reboot' 'systemctl reboot'

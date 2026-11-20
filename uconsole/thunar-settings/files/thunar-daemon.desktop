@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Thunar in the background
+Comment=Thunar opens its windows at once; thunar-volman mounts what is plugged in
+Exec=thunar --daemon
+NoDisplay=true
