@@ -16,7 +16,6 @@ KEYWORDS="arm64"
 RDEPEND="
 	uconsole/system-base
 	gui-wm/sway
-	gui-apps/foot
 	uconsole/sway-settings
 	uconsole/swayidle-sway
 	uconsole/waybar-sway
