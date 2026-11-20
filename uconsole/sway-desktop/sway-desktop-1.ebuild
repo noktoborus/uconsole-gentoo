@@ -23,6 +23,7 @@ RDEPEND="
 	uconsole/swaync-sway
 	uconsole/grim-sway
 	uconsole/wireplumber-sway
+	uconsole/zyterm-sway
 	uconsole/greeter-settings
 	uconsole/plymouth-settings
 	sys-apps/systemd[homed]

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE pkgmetadata SYSTEM "https://www.gentoo.org/dtd/metadata.dtd">
+<pkgmetadata>
+	<maintainer type="person">
+		<email>noktoborus@gmail.com</email>
+	</maintainer>
+	<longdescription>A GUI terminal for serial consoles and the local shell, built with egui and wgpu.</longdescription>
+	<upstream>
+		<remote-id type="github">noktoborus/zyterm</remote-id>
+	</upstream>
+</pkgmetadata>
