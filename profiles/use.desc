@@ -1,0 +1,3 @@
+# The global USE flags of this repository: none. Its flags are local,
+# in use.local.desc. euse needs this file not empty: without it, it skips
+# use.local.desc of the repository.
