@@ -1,7 +1,8 @@
 # The x86 Arch rootfs of FEX-Emu (rootfs.fex-emu.gg), an EroFS image, for
 # the FEX of Steam: an automount unit puts it read-only at
 # /usr/share/guestos/fex-mesa, the path fex-compat-tool of Valve looks at,
-# on the first access, and takes it off after 10 minutes of no use.
+# on the first access, and takes it off after 10 minutes of no use. A
+# preset enables the automount unit.
 # The image has graphics_provider.json in its root and mesa with v3d and
 # broadcom (Vulkan) for x86_64 and i386. The version is the date of the
 # image.
@@ -52,10 +53,13 @@ src_install() {
 	keepdir /usr/share/guestos/fex-mesa
 	systemd_dounit "${FILESDIR}"/'usr-share-guestos-fex\x2dmesa.mount' \
 		"${FILESDIR}"/'usr-share-guestos-fex\x2dmesa.automount'
+	insinto "$(systemd_get_systempresetdir)"
+	doins "${FILESDIR}"/50-fex-rootfs-arch.preset
 }
 
 pkg_postinst() {
-	elog "Mount the rootfs for the FEX of Steam on demand:"
+	elog "A preset enables the automount unit for a new system (systemctl preset)."
+	elog "On this one, mount the rootfs for the FEX of Steam on demand:"
 	elog "    systemctl enable --now 'usr-share-guestos-fex\\x2dmesa.automount'"
 	elog "or at each boot, in place of it:"
 	elog "    systemctl enable --now 'usr-share-guestos-fex\\x2dmesa.mount'"

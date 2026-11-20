@@ -1,0 +1,3 @@
+# The rootfs of the FEX of Steam, mounted on demand. For a mount at each
+# boot in place of it: disable this, enable the .mount unit.
+enable usr-share-guestos-fex\x2dmesa.automount
