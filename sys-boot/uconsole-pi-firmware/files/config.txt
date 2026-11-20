@@ -4,8 +4,6 @@
 
 [pi4]
 hdmi_enable_4kp60=1
-hdmi_group=2
-hdmi_driver=2
 dtoverlay=clockworkpi-uconsole
 dtoverlay=vc4-kms-v3d-pi4,cma-384
 enable_uart=1
@@ -14,10 +12,12 @@ arm_freq=1900
 gpu_mem=256
 over_voltage=5
 dtoverlay=audremap,pins_12_13
+dtparam=audio=on
 
 [pi5]
 dtoverlay=clockworkpi-uconsole-cm5
 dtoverlay=vc4-kms-v3d-pi5,cma-384
+dtoverlay=uconsole-cm5-sound
 dtparam=uart0
 dtparam=pciex1
 dtparam=pciex1_gen=3
@@ -25,13 +25,22 @@ arm_freq_min=500
 arm_freq=2000
 
 [all]
-dtoverlay=clockworkpi-custom-battery,energy_full_design_uwh=16640000,charge_full_design_uah=3337000
+dtoverlay=
+# the SD card is polled once, at boot: without it the power off of the
+# uConsole may take a long time
+dtparam=sd_poll_once
+dtparam=ant2
+
+dtoverlay=axp22x-soft-battery
+dtparam=v_off=2700000
+dtparam=energy_full_design_uwh=32332474
+
+dtoverlay=axp22x-soft-battery-ocv
+
 ignore_lcd=1
 max_framebuffers=2
 disable_overscan=1
-dtparam=audio=on
 dtoverlay=dwc2,dr_mode=host
-dtparam=ant2
 # the headphone jack (high: headphones in), the amplifier of the speakers
 # off until the driver of the sound card takes it (the overlay of the CM5)
 gpio=10=ip,np
