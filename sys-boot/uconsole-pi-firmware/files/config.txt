@@ -35,6 +35,16 @@ dtoverlay=axp22x-soft-battery
 dtparam=v_off=2700000
 dtparam=energy_full_design_uwh=32332474
 
+# The curves of this battery, worked out from its runs; no package installs
+# this overlay, the firmware skips it while it is not there. Make it:
+#   1. systemctl enable --now axp22x-soft-battery.service, then charge
+#      the battery full and run it down to the power off, once or more
+#      (the runs go to /var/lib/axp22x-soft-battery);
+#   2. axp22x-soft-battery gen-dts > /tmp/axp22x-soft-battery-ocv.dts
+#      (--use-partial takes also a run cut at 10 % or lower);
+#   3. dtc -@ -I dts -O dtb -o /boot/overlays/axp22x-soft-battery-ocv.dtbo \
+#          /tmp/axp22x-soft-battery-ocv.dts
+#   4. reboot.
 dtoverlay=axp22x-soft-battery-ocv
 
 ignore_lcd=1
