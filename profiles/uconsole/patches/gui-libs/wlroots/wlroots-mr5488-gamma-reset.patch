@@ -1,0 +1,99 @@
+From 48b395191aea45dc8af584138f55578a550e816b Mon Sep 17 00:00:00 2001
+From: Jacob Procee <sn125164@gmail.com>
+Date: Tue, 20 Oct 2026 11:37:48 +0200
+Subject: [PATCH 1/2] backend/drm: skip legacy gamma on CRTCs without it
+
+drm_atomic_connector_prepare() picked the legacy gamma ioctl whenever the
+CRTC has no GAMMA_LUT property. Atomic-only drivers without any gamma
+support (e.g. apple-dcp on Apple Silicon: no GAMMA_LUT, no
+GAMMA_LUT_SIZE, legacy gamma_size 0) were thus routed into
+drm_legacy_crtc_set_gamma(), which fails, and that cancels the whole
+atomic commit.
+
+wlr_scene resets the gamma LUT (NULL color transform) on every output
+enable, so on such drivers the first commit after "output power on"
+always failed and the display stayed off. The test commit doesn't
+catch it: wlr_output_test_state() drops the unchanged NULL color
+transform via output_compare_state(), while wlr_backend_commit() keeps
+it.
+
+Only fall back to the legacy interface when the CRTC has a legacy gamma
+size. Without any gamma support, treat a reset as a no-op and reject a
+real LUT, so gamma-control clients still get a failed test.
+
+Based on the analysis and patch by Thomas Glanzmann in #4123.
+---
+ backend/drm/atomic.c | 19 ++++++++++++-------
+ 1 file changed, 12 insertions(+), 7 deletions(-)
+
+diff --git a/backend/drm/atomic.c b/backend/drm/atomic.c
+index a7ea3a7e7..94f8a4a40 100644
+--- a/backend/drm/atomic.c
++++ b/backend/drm/atomic.c
+@@ -349,18 +349,23 @@ bool drm_atomic_connector_prepare(struct wlr_drm_connector_state *state, bool mo
+ 			lut = tr->lut_3x1d;
+ 		}
+ 
+-		// Fallback to legacy gamma interface when gamma properties are not
+-		// available (can happen on older Intel GPUs that support gamma but not
+-		// degamma).
+-		if (crtc->props.gamma_lut == 0) {
+-			if (!drm_legacy_crtc_set_gamma(drm, crtc, dim, lut)) {
++		if (crtc->props.gamma_lut != 0) {
++			if (!create_gamma_lut_blob(drm, dim, lut, &gamma_lut)) {
+ 				return false;
+ 			}
+-		} else {
+-			if (!create_gamma_lut_blob(drm, dim, lut, &gamma_lut)) {
++		} else if (crtc->legacy_gamma_size != 0) {
++			// Fallback to legacy gamma interface when gamma properties are not
++			// available (can happen on older Intel GPUs that support gamma but not
++			// degamma).
++			if (!drm_legacy_crtc_set_gamma(drm, crtc, dim, lut)) {
+ 				return false;
+ 			}
++		} else if (lut != NULL) {
++			wlr_drm_conn_log(conn, WLR_DEBUG,
++				"Color transform not supported: CRTC has no gamma LUT");
++			return false;
+ 		}
++		// Resetting the gamma LUT of a CRTC without one is a no-op
+ 	}
+ 
+ 	uint32_t fb_damage_clips = 0;
+-- 
+GitLab
+
+
+From 09ed54769276b7de13beb63f14fc1f96962d8c30 Mon Sep 17 00:00:00 2001
+From: Jacob Procee <sn125164@gmail.com>
+Date: Tue, 20 Oct 2026 11:37:48 +0200
+Subject: [PATCH 2/2] scene: only re-apply gamma on enable if one is set
+
+When an output is enabled, the scene marks the gamma LUT as changed so
+that it's re-applied. Without a gamma-control client that only commits a
+NULL color transform, a no-op reset that the backend may not support
+(see the previous commit). Only re-apply it when a client has set a LUT.
+
+Closes: https://gitlab.freedesktop.org/wlroots/wlroots/-/issues/4123
+---
+ types/scene/wlr_scene.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/types/scene/wlr_scene.c b/types/scene/wlr_scene.c
+index 870fd91a1..e9a5f85f4 100644
+--- a/types/scene/wlr_scene.c
++++ b/types/scene/wlr_scene.c
+@@ -1784,7 +1784,8 @@ static void scene_output_handle_commit(struct wl_listener *listener, void *data)
+ 	// Next time the output is enabled, try to re-apply the gamma LUT
+ 	if (scene_output->scene->gamma_control_manager_v1 &&
+ 			(state->committed & WLR_OUTPUT_STATE_ENABLED) &&
+-			!scene_output->output->enabled) {
++			!scene_output->output->enabled &&
++			scene_output->gamma_lut != NULL) {
+ 		scene_output->gamma_lut_changed = true;
+ 	}
+ }
+-- 
+GitLab
+

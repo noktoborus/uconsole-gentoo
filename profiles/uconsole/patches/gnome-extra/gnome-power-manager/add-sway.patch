@@ -1,0 +1,15 @@
+Show "Power Statistics" in the menu of sway too: its desktop entry
+names GNOME and Unity only in OnlyShowIn.
+
+diff --git a/data/org.gnome.PowerStats.desktop.in b/data/org.gnome.PowerStats.desktop.in
+index 6202575..fa4aad5 100644
+--- a/data/org.gnome.PowerStats.desktop.in
++++ b/data/org.gnome.PowerStats.desktop.in
+@@ -9,6 +9,6 @@ Exec=gnome-power-statistics
+ Terminal=false
+ Type=Application
+ Categories=GNOME;GTK;System;Monitor;
+-OnlyShowIn=GNOME;Unity;
++OnlyShowIn=GNOME;Unity;sway
+ StartupNotify=true
+ X-Desktop-File-Install-Version=0.10
