@@ -44,4 +44,5 @@ RDEPEND="
 	gnome-base/gvfs
 	sys-fs/udisks
 	net-wireless/blueman
+	gnome-extra/gnome-power-manager
 "
