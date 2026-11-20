@@ -1,0 +1,11 @@
+[Unit]
+Description=The x86 Arch rootfs of FEX for Steam, mounted on demand
+Documentation=https://rootfs.fex-emu.gg/
+ConditionPathExists=/usr/share/fex-emu/RootFS/ArchLinux.ero
+
+[Automount]
+Where=/usr/share/guestos/fex-mesa
+TimeoutIdleSec=10min
+
+[Install]
+WantedBy=multi-user.target
