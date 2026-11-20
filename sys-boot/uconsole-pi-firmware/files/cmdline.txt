@@ -1,1 +1,1 @@
-console=tty1 root=PARTLABEL=uconsole-root rootfstype=ext4 ro rootwait fsck.repair=yes quiet splash plymouth.ignore-serial-consoles pcie_aspm.policy=powersave threadirqs loglevel=3 logo.nologo vt.global_cursor_default=0
+console=tty1 root=PARTLABEL=uconsole-root rootfstype=ext4 ro rootwait fsck.repair=yes quiet splash plymouth.ignore-serial-consoles pcie_aspm.policy=powersave threadirqs cgroup_enable=memory cgroup_memory=1 loglevel=3 logo.nologo vt.global_cursor_default=0
