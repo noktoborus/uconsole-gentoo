@@ -1,0 +1,13 @@
+[Unit]
+Description=The x86 Arch rootfs of FEX for Steam
+Documentation=https://rootfs.fex-emu.gg/
+ConditionPathExists=/usr/share/fex-emu/RootFS/ArchLinux.ero
+
+[Mount]
+What=/usr/share/fex-emu/RootFS/ArchLinux.ero
+Where=/usr/share/guestos/fex-mesa
+Type=erofs
+Options=ro,loop,nodev,nosuid
+
+[Install]
+WantedBy=multi-user.target

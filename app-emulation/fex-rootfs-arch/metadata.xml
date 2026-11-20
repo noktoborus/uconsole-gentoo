@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE pkgmetadata SYSTEM "https://www.gentoo.org/dtd/metadata.dtd">
+<pkgmetadata>
+	<maintainer type="person">
+		<email>noktoborus@gmail.com</email>
+	</maintainer>
+	<longdescription>The ArchLinux EroFS image of rootfs.fex-emu.gg, mounted read-only at /usr/share/guestos/fex-mesa for fex-compat-tool, the FEX of Steam.</longdescription>
+</pkgmetadata>
