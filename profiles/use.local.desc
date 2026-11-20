@@ -1,6 +1,22 @@
 # This file is generated from the metadata.xml of the packages.
 # Do not edit by hand: run use-local-desc.py of the skill gentoo-overlay.
+dev-libs/date:only-c-locale - Build only the C locale
 gui-apps/swaync:pulseaudio - Build the volume widget of the control center with media-libs/libpulse
+gui-apps/waybar:backlight - Enable module that controls the current backlight level
+gui-apps/waybar:evdev - Enable libevdev support for evdev related features
+gui-apps/waybar:experimental - Enable experimental features, such as Bluetooth battery reporting
+gui-apps/waybar:libinput - Enable libinput support for libinput related features
+gui-apps/waybar:logind - Enable support for logind (bluetooth and idle inhibit)
+gui-apps/waybar:mpd - Enable support for the Music Player Daemon
+gui-apps/waybar:mpris - Enable support for mpris
+gui-apps/waybar:network - Enable libnl support for network related features
+gui-apps/waybar:niri - Enable support for Niri Wayland compositor
+gui-apps/waybar:pipewire - Enable support for pipewire
+gui-apps/waybar:pulseaudio - Enable support for volume control via PulseAudio
+gui-apps/waybar:sndio - Enable support for volume control via sndio
+gui-apps/waybar:tray - Enable support for tray
+gui-apps/waybar:wifi - Enable support for wifi/rfkill
+gui-libs/xdg-desktop-portal-wlr:elogind - Enable support for rootless session via elogind
 sys-boot/uconsole-pi-firmware:cm4 - For the Raspberry Pi CM4: also start4*.elf and fixup4*.dat of the firmware of Raspberry Pi
 sys-boot/uconsole-pi-firmware:cm5 - For the Raspberry Pi CM5: config.txt and cmdline.txt only; its firmware is in the EEPROM
 sys-kernel/uconsole-pi-kernel:16k - Build the kernel of the CM5 with 16K pages in place of 4K
