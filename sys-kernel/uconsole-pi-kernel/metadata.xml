@@ -8,6 +8,6 @@
 	<use>
 		<flag name="cm5">Build the kernel of the Raspberry Pi CM5 (bcm2712_defconfig, kernel_2712.img)</flag>
 		<flag name="cm4">Build the kernel of the Raspberry Pi CM4 (bcm2711_defconfig, kernel8.img)</flag>
-		<flag name="16k">Build the kernel of the CM5 with 16K pages in place of 4K</flag>
+		<flag name="16k">Also build the kernel of the CM5 with 16K pages, kernel_2712_16k.img, beside the kernel with 4K pages</flag>
 	</use>
 </pkgmetadata>

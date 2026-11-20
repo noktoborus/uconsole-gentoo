@@ -3,7 +3,7 @@
 # dist-kernel) depends on virtual/dist-kernel:=, so each new kernel has a
 # new subslot here, and Portage builds those modules again with it. The
 # virtual of the gentoo repository is masked (package.mask/uconsole).
-# kernel/bump.sh renames it with the kernel.
+# It takes each new version of the kernel.
 
 EAPI=8
 

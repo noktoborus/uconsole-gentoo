@@ -1,14 +1,15 @@
 # The kernel of the ClockworkPi uConsole: Raspberry Pi rpi-7.3.y with the
 # series of files/patches/uconsole-7.3, for each platform of USE (cm5,
-# cm4, both side by side; 16k: the CM5 with 16K pages). Built in the
+# cm4, both side by side; 16k: also the CM5 with 16K pages, beside the
+# kernel of the CM5 with 4K pages). Built in the
 # builder as each other package; the uConsole takes its binary package.
 # The files of the firmware go to /boot, the FAT partition, as
 # sys-boot/uconsole-pi-firmware puts its files.
 #
 # It needs nothing but this directory: the source is the tarball of one
 # commit of Raspberry Pi, files/ has the series and the fragments of the
-# configuration. kernel/bump.sh gives
-# it a new version when files/ or the commit changes.
+# configuration. A change of files/ or of this ebuild is a new version
+# of it and of virtual/dist-kernel, one version.
 
 EAPI=8
 
@@ -42,17 +43,18 @@ BDEPEND="
 # EEPROM
 RDEPEND="sys-boot/uconsole-pi-firmware[cm4?,cm5?]"
 
-# files/ sha256 (kernel/bump.sh): 2cacebfb2e6edb74f365a1ff5e140dfff6e9809024fdb32cafd59efea83356a4
-
 # The kernels to build, one line each: <platform>, its defconfig, the name
 # of its kernel file (the name the firmware looks for: kernel_2712.img on
 # the CM5, kernel8.img on the CM4), its device trees, the CPU it is tuned
 # for (KCFLAGS). The fragment of the platform is
-# files/uconsole-<platform>.config.
+# files/uconsole-<platform>.config. The device trees "-": none, the kernel
+# of the CM5 with 4K pages has the same. cm5-16k is before cm5: the last
+# kernel takes /usr/src/linux (src_install).
 pkg_setup() {
 	UCONSOLE_KERNELS=()
 	use cm4 && UCONSOLE_KERNELS+=( "cm4 bcm2711_defconfig kernel8 bcm2711-rpi-cm4 cortex-a72" )
-	use cm5 && UCONSOLE_KERNELS+=( "cm5$(usev 16k -16k) bcm2712_defconfig kernel_2712 bcm2712 cortex-a76" )
+	use 16k && UCONSOLE_KERNELS+=( "cm5-16k bcm2712_defconfig kernel_2712_16k - cortex-a76" )
+	use cm5 && UCONSOLE_KERNELS+=( "cm5 bcm2712_defconfig kernel_2712 bcm2712 cortex-a76" )
 }
 
 src_prepare() {
@@ -103,7 +105,7 @@ src_compile() {
 	for k in "${UCONSOLE_KERNELS[@]}"; do
 		read -r platform defconfig image dtbs cpu <<< "${k}"
 		emake -C "${S}" O="${WORKDIR}/build-${platform}" "${UCONSOLE_MAKEARGS[@]}" \
-			KCFLAGS="-mtune=${cpu}" Image modules dtbs
+			KCFLAGS="-mtune=${cpu}" Image modules $([[ ${dtbs} == - ]] || echo dtbs)
 	done
 }
 
@@ -120,9 +122,11 @@ src_install() {
 		# platform: one tree)
 		insinto /boot
 		newins "${b}/arch/arm64/boot/Image" "${image}.img"
-		doins "${b}"/arch/arm64/boot/dts/broadcom/${dtbs}*.dtb
-		insinto /boot/overlays
-		doins "${b}"/arch/arm64/boot/dts/overlays/*.dtbo "${S}/arch/arm/boot/dts/overlays/README"
+		if [[ ${dtbs} != - ]]; then
+			doins "${b}"/arch/arm64/boot/dts/broadcom/${dtbs}*.dtb
+			insinto /boot/overlays
+			doins "${b}"/arch/arm64/boot/dts/overlays/*.dtbo "${S}/arch/arm/boot/dts/overlays/README"
+		fi
 
 		emake -C "${S}" O="${b}" "${UCONSOLE_MAKEARGS[@]}" \
 			INSTALL_MOD_PATH="${ED}" INSTALL_MOD_STRIP=1 modules_install
@@ -144,4 +148,16 @@ src_install() {
 	# /dev/ntsync has no alias: systemd loads the module at boot
 	insinto /usr/lib/modules-load.d
 	newins "${FILESDIR}"/modules-load-ntsync.conf ntsync.conf
+}
+
+pkg_postinst() {
+	mount-boot_pkg_postinst
+	use 16k || return
+	elog "The kernel of the CM5 with 16K pages is /boot/kernel_2712_16k.img."
+	elog "The firmware boots /boot/kernel_2712.img (4K pages) by default."
+	elog "One boot with 16K pages: sudo reboot '0 tryboot'"
+	elog "(the section [tryboot] of /boot/config.txt of sys-boot/uconsole-pi-firmware)."
+	elog "Always: kernel=kernel_2712_16k.img under [pi5] of /boot/config.txt."
+	elog "The modules of other packages (linux-mod-r1) are built for /usr/src/linux,"
+	elog "the kernel with 4K pages: the kernel with 16K pages has none of them."
 }

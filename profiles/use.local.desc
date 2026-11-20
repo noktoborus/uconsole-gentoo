@@ -19,7 +19,7 @@ gui-apps/waybar:wifi - Enable support for wifi/rfkill
 gui-libs/xdg-desktop-portal-wlr:elogind - Enable support for rootless session via elogind
 sys-boot/uconsole-pi-firmware:cm4 - For the Raspberry Pi CM4: also start4*.elf and fixup4*.dat of the firmware of Raspberry Pi
 sys-boot/uconsole-pi-firmware:cm5 - For the Raspberry Pi CM5: config.txt and cmdline.txt only; its firmware is in the EEPROM
-sys-kernel/uconsole-pi-kernel:16k - Build the kernel of the CM5 with 16K pages in place of 4K
+sys-kernel/uconsole-pi-kernel:16k - Also build the kernel of the CM5 with 16K pages, kernel_2712_16k.img, beside the kernel with 4K pages
 sys-kernel/uconsole-pi-kernel:cm4 - Build the kernel of the Raspberry Pi CM4 (bcm2711_defconfig, kernel8.img)
 sys-kernel/uconsole-pi-kernel:cm5 - Build the kernel of the Raspberry Pi CM5 (bcm2712_defconfig, kernel_2712.img)
 sys-power/drowse:cm5-tuned - Install the profiles of sys-apps/tuned cm5-powersave and cm5-powersave-no-radio (a Raspberry Pi 5 or CM5 while idle) as profiles, not only as examples
